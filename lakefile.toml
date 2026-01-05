@@ -1,0 +1,6 @@
+name = "cad_lean"
+version = "0.1.0"
+defaultTargets = ["CadLean"]
+
+[[lean_lib]]
+name = "CadLean"

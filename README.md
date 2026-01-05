@@ -33,3 +33,14 @@ The main interface is `solve_poly_system_cad` which takes a list of polynomials 
 
 As you can see, it returns satisfying points for the first three systems. Predictably, the fourth system, which is a quadratic always lying below the x-axis, is not satisfiable.
 
+## Lean 4 reimplementation
+
+This repo now includes a **pure Lean 4** reimplementation of the CAD algorithm. The code lives in `CadLean/Basic.lean` and exposes a small API around `solvePolySystemCAD`. It is intentionally **slow but complete**, using a Collins-style projection (coefficients, discriminants, resultants) and a Sturm-sequence root isolation with rational bisection. The root sampling is numeric/approximate (using rational midpoints), not exact algebraic numbers, so equality tests use a small epsilon.
+
+Build:
+
+```
+lake build
+```
+
+You can inspect the examples in `CadLean/Basic.lean` (`example1`, `example2`) as a starting point.
