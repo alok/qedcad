@@ -35,7 +35,7 @@ As you can see, it returns satisfying points for the first three systems. Predic
 
 ## Lean 4 reimplementation
 
-This repo now includes a **pure Lean 4** reimplementation of the CAD algorithm. The code lives in `CadLean/Basic.lean` and exposes a small API around `solvePolySystemCAD`. It is intentionally **slow but complete**, using a Collins-style projection (coefficients, discriminants, resultants) and a Sturm-sequence root isolation with rational bisection. The root sampling is numeric/approximate (using rational midpoints), not exact algebraic numbers, so equality tests use a small epsilon.
+This repo now includes a **pure Lean 4** reimplementation of the CAD algorithm. The code lives in `CadLean/Basic.lean` and exposes a small API around `solvePolySystemCAD`. It is intentionally **slow but complete**, using Hong’s projection (reducta + principal subresultant coefficients) and a Sturm-sequence root isolation with rational bisection. The root sampling is numeric/approximate (using rational midpoints), not exact algebraic numbers, so equality tests use a small epsilon.
 
 Build:
 

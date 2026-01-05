@@ -568,57 +568,7 @@ def realRootsApprox (p : URatPoly) (depth : Nat := 60) (refine : Nat := 30) : Li
 end URatPoly
 
 
--- Projection operator (Collins-style: coefficients, discriminants, resultants)
-
-structure UPolyPoly where
-  coeffs : Array Poly
-
-namespace UPolyPoly
-
-
-def trim (p : UPolyPoly) : UPolyPoly :=
-  Id.run do
-    let mut n := p.coeffs.size
-    while n > 0 && Poly.isZero (p.coeffs[n - 1]!) do
-      n := n - 1
-    return { coeffs := p.coeffs.extract 0 n }
-
-
-def degree (p : UPolyPoly) : Nat :=
-  if p.coeffs.size == 0 then 0 else p.coeffs.size - 1
-
-
-def coeffsDesc (p : UPolyPoly) : Array Poly :=
-  let d := degree p
-  Id.run do
-    let mut res := Array.mkEmpty (d + 1)
-    for i in [:d+1] do
-      res := res.push (p.coeffs[d - i]!)
-    return res
-
-end UPolyPoly
-
-
-def sylvesterMatrix (f g : UPolyPoly) : Array (Array Poly) :=
-  let mf := UPolyPoly.degree f
-  let mg := UPolyPoly.degree g
-  let fCoeffs := UPolyPoly.coeffsDesc f
-  let gCoeffs := UPolyPoly.coeffsDesc g
-  let n := mf + mg
-  Id.run do
-    let mut rows : Array (Array Poly) := Array.mkEmpty n
-    for i in [:mg] do
-      let mut row := Array.replicate n (Poly.zero (f.coeffs[0]!).nvars)
-      for j in [:mf+1] do
-        row := arraySet row (i + j) (fCoeffs[j]! )
-      rows := rows.push row
-    for i in [:mf] do
-      let mut row := Array.replicate n (Poly.zero (g.coeffs[0]!).nvars)
-      for j in [:mg+1] do
-        row := arraySet row (i + j) (gCoeffs[j]! )
-      rows := rows.push row
-    return rows
-
+-- Determinant on matrices of polynomials (slow, for subresultants)
 
 def minorMatrix (m : Array (Array Poly)) (row col : Nat) : Array (Array Poly) :=
   Id.run do
@@ -651,45 +601,92 @@ def det (nvars : Nat) (m : Array (Array Poly)) : Poly :=
   detAux nvars m.size m
 
 
-def resultant (f g : Poly) (mvar : Nat) : Poly :=
-  let fU := UPolyPoly.trim { coeffs := Poly.toUnivariate f mvar }
-  let gU := UPolyPoly.trim { coeffs := Poly.toUnivariate g mvar }
-  if fU.coeffs.size == 0 || gU.coeffs.size == 0 then
-    Poly.zero f.nvars
+-- Hong projection operator using subresultant coefficients
+
+def coeffsDesc (coeffs : Array Poly) : Array Poly :=
+  let d := coeffs.size - 1
+  Id.run do
+    let mut res := Array.mkEmpty (d + 1)
+    for i in [:d+1] do
+      res := res.push (coeffs[d - i]!)
+    return res
+
+
+def subresultantMatrix (f g : Poly) (mvar k : Nat) : Array (Array Poly) :=
+  let fCoeffs := coeffsDesc (Poly.toUnivariate f mvar)
+  let gCoeffs := coeffsDesc (Poly.toUnivariate g mvar)
+  let m := fCoeffs.size - 1
+  let n := gCoeffs.size - 1
+  let rowsF := n - k
+  let rowsG := m - k
+  let size := m + n - 2 * k
+  Id.run do
+    let mut rows : Array (Array Poly) := Array.mkEmpty size
+    for i in [:rowsF] do
+      let mut row := Array.replicate size (Poly.zero f.nvars)
+      for j in [:m+1] do
+        if i + j < size then
+          row := arraySet row (i + j) (fCoeffs[j]! )
+      rows := rows.push row
+    for i in [:rowsG] do
+      let mut row := Array.replicate size (Poly.zero f.nvars)
+      for j in [:n+1] do
+        if i + j < size then
+          row := arraySet row (i + j) (gCoeffs[j]! )
+      rows := rows.push row
+    return rows
+
+
+def subresultantCoefficients (f g : Poly) (mvar : Nat) : List Poly :=
+  let df := Poly.degree f mvar
+  let dg := Poly.degree g mvar
+  if dg == 0 then
+    []
   else
-    let mat := sylvesterMatrix fU gU
-    det f.nvars mat
+    let (f, g, dg) :=
+      if df < dg then (g, f, df) else (f, g, dg)
+    Id.run do
+      let mut res : List Poly := []
+      for k in [:dg] do
+        let mat := subresultantMatrix f g mvar k
+        let psc := det f.nvars mat
+        res := res.concat psc
+      -- final PSC term (approximate): leading coefficient of g
+      res := res.concat (Poly.leadingCoeff g mvar)
+      return res
 
 
-def discriminant (f : Poly) (mvar : Nat) : Poly :=
-  resultant f (Poly.derivative f mvar) mvar
-
-
-def coeffsInVar (f : Poly) (mvar : Nat) : List Poly :=
-  let coeffs := Poly.toUnivariate f mvar
-  coeffs.toList.filter (fun p => !Poly.isZero p)
-
-
-def projectCollins (F : List Poly) (mvar : Nat) : List Poly :=
+def projone (F : List Poly) (mvar : Nat) : List Poly :=
   Id.run do
     let mut acc : List Poly := []
-    -- coefficients and discriminants
     for f in F do
-      acc := acc ++ coeffsInVar f mvar
-      acc := acc.concat (discriminant f mvar)
-    -- pairwise resultants
+      for g in Poly.redSet f mvar do
+        acc := acc.concat (Poly.leadingCoeff g mvar)
+        acc := acc ++ subresultantCoefficients g (Poly.derivative g mvar) mvar
+    return acc
+
+
+def projtwo (F : List Poly) (mvar : Nat) : List Poly :=
+  Id.run do
+    let mut acc : List Poly := []
     let arr := F.toArray
     for i in [:arr.size] do
       for j in [i+1:arr.size] do
         let f := arr[i]!
         let g := arr[j]!
-        acc := acc.concat (resultant f g mvar)
-    -- normalize: remove constants, zeros, and duplicates up to sign
+        for f' in Poly.redSet f mvar do
+          acc := acc ++ subresultantCoefficients f' g mvar
+    return acc
+
+
+def hongproj (F : List Poly) (mvar : Nat) : List Poly :=
+  let proj := projone F mvar ++ projtwo F mvar
+  Id.run do
     let mut uniq : List Poly := []
-    for p in acc do
-      let p' := Poly.normalizeSign p
-      if Poly.isZero p' || Poly.isConst p' then
+    for p in proj do
+      if Poly.isConst p || Poly.isZero p then
         continue
+      let p' := Poly.normalizeSign p
       if uniq.any (fun q => Poly.eq q p') then
         continue
       uniq := uniq.concat p'
@@ -737,12 +734,19 @@ def mergeCloseRoots (roots : List Rat) (eps : Rat) : List Rat :=
   loop sorted [] |>.reverse
 
 
-def sampleBetween (l r : Option Rat) : Rat :=
+def getSamplePoint (l r : Option Rat) : Rat :=
   match l, r with
   | none, none => 0
   | none, some b => b - 1
   | some a, none => a + 1
-  | some a, some b => (a + b) / 2
+  | some a, some b =>
+      let (a', b') := if a > b then (b, a) else (a, b)
+      if a' == b' then
+        a'
+      else if a' < 0 && 0 < b' then
+        0
+      else
+        (a' + b') / 2
 
 
 def makeSamples (roots : List Rat) : List Rat :=
@@ -751,11 +755,11 @@ def makeSamples (roots : List Rat) : List Rat :=
   | r0 :: rs =>
       let rec loop (prev : Rat) (rest : List Rat) (acc : List Rat) : List Rat :=
         match rest with
-        | [] => acc ++ [sampleBetween (some prev) none]
+        | [] => acc ++ [getSamplePoint (some prev) none]
         | r :: rs =>
-            let acc' := acc ++ [sampleBetween (some prev) (some r), r]
+            let acc' := acc ++ [getSamplePoint (some prev) (some r), r]
             loop r rs acc'
-      let acc0 := [sampleBetween none (some r0), r0]
+      let acc0 := [getSamplePoint none (some r0), r0]
       loop r0 rs acc0
 
 
@@ -782,7 +786,7 @@ def cylindricalAlgebraicDecomposition (polys : List Poly) (vars : Array String) 
       let mut projSets : Array (List Poly) := #[polys]
       for i in [:vars.size - 1] do
         let prev := projSets[projSets.size - 1]!
-        let next := projectCollins prev i
+        let next := hongproj prev i
         projSets := projSets.push next
       let mut samplePoints : List (Std.HashMap Nat Rat) := [{}]
       for i in (List.range vars.size).reverse do
