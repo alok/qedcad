@@ -251,8 +251,6 @@ def isolateAux (p : URatPoly) (a b : Rat) : Nat → List (Rat × Rat)
       let c := rootCount p a b
       if c == 0 then
         []
-      else if c == 1 then
-        [(a, b)]
       else
         let m := (a + b) / 2
         isolateAux p a m depth ++ isolateAux p m b depth
@@ -1064,7 +1062,10 @@ def getSamplePoint (l r : Option Rat) : Rat :=
       if a' == b' then
         a'
       else if a' < 0 && 0 < b' then
-        0
+        if ratAbs a' <= epsRat || ratAbs b' <= epsRat then
+          (a' + b') / 2
+        else
+          0
       else
         let mid := (a' + b') / 2
         let flo := Rat.ofInt (Rat.floor mid)
