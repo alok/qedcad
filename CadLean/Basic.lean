@@ -220,11 +220,14 @@ def signVariations (signs : List Int) : Int :=
   | s :: rest => loop rest s 0
 
 
-def rootCount (p : URatPoly) (a b : Rat) : Int :=
-  let seq := sturmSequence p
+def rootCountWith (seq : List URatPoly) (a b : Rat) : Int :=
   let va := signVariations (seq.map (fun q => signAt q a))
   let vb := signVariations (seq.map (fun q => signAt q b))
   va - vb
+
+
+def rootCount (p : URatPoly) (a b : Rat) : Int :=
+  rootCountWith (sturmSequence p) a b
 
 
 def rootBound (p : URatPoly) : Rat :=
@@ -243,21 +246,25 @@ def rootBound (p : URatPoly) : Rat :=
       return 1 + m
 
 
-def isolateAux (p : URatPoly) (a b : Rat) : Nat → List (Rat × Rat)
+def isolateAuxWith (seq : List URatPoly) (a b : Rat) : Nat → List (Rat × Rat)
   | 0 =>
-      let c := rootCount p a b
+      let c := rootCountWith seq a b
       if c == 0 then [] else [(a, b)]
   | depth + 1 =>
-      let c := rootCount p a b
+      let c := rootCountWith seq a b
       if c == 0 then
         []
       else
         let m := (a + b) / 2
-        isolateAux p a m depth ++ isolateAux p m b depth
+        isolateAuxWith seq a m depth ++ isolateAuxWith seq m b depth
+
+
+def isolateAux (p : URatPoly) (a b : Rat) : Nat → List (Rat × Rat)
+  | n => isolateAuxWith (sturmSequence p) a b n
 
 
 def isolate (p : URatPoly) (a b : Rat) (depth : Nat) : List (Rat × Rat) :=
-  isolateAux p a b depth
+  isolateAuxWith (sturmSequence p) a b depth
 
 
 def realRootsIsolate (p : URatPoly) (depth : Nat := 60) : List (Rat × Rat) :=
