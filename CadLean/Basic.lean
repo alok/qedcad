@@ -118,25 +118,27 @@ def scale (p : URatPoly) (c : Rat) : URatPoly :=
   if c = 0 then zero else { coeffs := p.coeffs.map (fun x => c * x) } |> trim
 
 
+@[inline] def mulCoeffsRat (pCoeffs qCoeffs : Array Rat) : Array Rat :=
+  let n := pCoeffs.size + qCoeffs.size - 1
+  Id.run do
+    let mut res := Array.replicate n (0 : Rat)
+    for i in [:pCoeffs.size] do
+      let pi := pCoeffs[i]!
+      if pi != 0 then
+        for j in [:qCoeffs.size] do
+          let qj := qCoeffs[j]!
+          if qj != 0 then
+            let idx := i + j
+            let curr := res[idx]!
+            res := arraySet! res idx (curr + pi * qj)
+    return res
+
 def mul (p q : URatPoly) : URatPoly :=
   if isZero p || isZero q then
     zero
   else
-    let pCoeffs := p.coeffs
-    let qCoeffs := q.coeffs
-    let n := pCoeffs.size + qCoeffs.size - 1
-    Id.run do
-      let mut res := Array.replicate n (0 : Rat)
-      for i in [:pCoeffs.size] do
-        let pi := pCoeffs[i]!
-        if pi != 0 then
-          for j in [:qCoeffs.size] do
-            let qj := qCoeffs[j]!
-            if qj != 0 then
-              let idx := i + j
-              let curr := res[idx]!
-              res := arraySet! res idx (curr + pi * qj)
-      return trim { coeffs := res }
+    let coeffs := mulCoeffsRat p.coeffs q.coeffs
+    trim { coeffs := coeffs }
 
 
 def pow (p : URatPoly) (n : Nat) : URatPoly :=
@@ -189,29 +191,28 @@ def divRem (p q : URatPoly) : URatPoly × URatPoly :=
       return (trim qout, trim r)
 
 
+@[inline] def sturmNext (a b : URatPoly) : Option URatPoly :=
+  if isZero b then
+    none
+  else
+    let (_, r) := divRem a b
+    if isZero r then none else some (neg r)
+
+partial def sturmLoop (seq : List URatPoly) : List URatPoly :=
+  match seq with
+  | [] | [_] => seq
+  | _ =>
+      let a := listGetD seq (seq.length - 2) zero
+      let b := listGetD seq (seq.length - 1) zero
+      match sturmNext a b with
+      | none => seq
+      | some r => sturmLoop (seq.concat r)
+
 def sturmSequence (p : URatPoly) : List URatPoly :=
   if isZero p then
     []
   else
-    Id.run do
-      let mut seq : List URatPoly := [p, derivative p]
-      let mut done := false
-      while !done do
-        match seq with
-        | [] | [_] =>
-            done := true
-        | _ =>
-            let a := listGetD seq (seq.length - 2) zero
-            let b := listGetD seq (seq.length - 1) zero
-            if isZero b then
-              done := true
-            else
-              let (_, r) := divRem a b
-              if isZero r then
-                done := true
-              else
-                seq := seq.concat (neg r)
-      return seq
+    sturmLoop [p, derivative p]
 
 
 def signAt (p : URatPoly) (x : Rat) : Int :=
@@ -322,22 +323,23 @@ def realRootsIsolate (p : URatPoly) (depth : Nat := 60) : List (Rat × Rat) :=
     isolate p (-bound) bound depth
 
 
-def shift (p : URatPoly) (a : Rat) : URatPoly :=
-  -- p(x - a)
+@[inline] def shiftCoeffs (p : URatPoly) (a : Rat) : Array Rat :=
   let d := degree p
   Id.run do
-    let mut res := zero
+    let mut coeffs := Array.replicate (d + 1) (0 : Rat)
     for i in [:d+1] do
-      let coeff := p.coeffs[i]!
-      if coeff != 0 then
+      let ci := p.coeffs[i]!
+      if ci != 0 then
         for k in [:i+1] do
           let bin := ratOfNat (binom i k)
-          let term := coeff * bin * ratPow (-a) (i - k)
-          let curr := if k < res.coeffs.size then res.coeffs[k]! else 0
-          let mut coeffs := if res.coeffs.size > k then res.coeffs else Array.replicate (k + 1) (0 : Rat)
-          coeffs := arraySet coeffs k (curr + term)
-          res := trim { coeffs := coeffs }
-    return res
+          let term := ci * bin * ratPow (-a) (i - k)
+          let curr := coeffs[k]!
+          coeffs := arraySet! coeffs k (curr + term)
+    return coeffs
+
+def shift (p : URatPoly) (a : Rat) : URatPoly :=
+  -- p(x - a)
+  trim { coeffs := shiftCoeffs p a }
 
 
 def scaleVar (p : URatPoly) (c : Rat) : URatPoly :=
@@ -410,25 +412,27 @@ def scale (p : UAlgPoly) (c : URatPoly) : UAlgPoly :=
   if URatPoly.isZero c then zero else { coeffs := p.coeffs.map (fun x => URatPoly.mul c x) } |> trim
 
 
+@[inline] def mulCoeffsAlg (pCoeffs qCoeffs : Array URatPoly) : Array URatPoly :=
+  let n := pCoeffs.size + qCoeffs.size - 1
+  Id.run do
+    let mut res := Array.replicate n URatPoly.zero
+    for i in [:pCoeffs.size] do
+      let pi := pCoeffs[i]!
+      if !URatPoly.isZero pi then
+        for j in [:qCoeffs.size] do
+          let qj := qCoeffs[j]!
+          if !URatPoly.isZero qj then
+            let idx := i + j
+            let curr := res[idx]!
+            res := arraySet! res idx (URatPoly.add curr (URatPoly.mul pi qj))
+    return res
+
 def mul (p q : UAlgPoly) : UAlgPoly :=
   if isZero p || isZero q then
     zero
   else
-    let pCoeffs := p.coeffs
-    let qCoeffs := q.coeffs
-    let n := pCoeffs.size + qCoeffs.size - 1
-    Id.run do
-      let mut res := Array.replicate n URatPoly.zero
-      for i in [:pCoeffs.size] do
-        let pi := pCoeffs[i]!
-        if !URatPoly.isZero pi then
-          for j in [:qCoeffs.size] do
-            let qj := qCoeffs[j]!
-            if !URatPoly.isZero qj then
-              let idx := i + j
-              let curr := res[idx]!
-              res := arraySet! res idx (URatPoly.add curr (URatPoly.mul pi qj))
-      return trim { coeffs := res }
+    let coeffs := mulCoeffsAlg p.coeffs q.coeffs
+    trim { coeffs := coeffs }
 
 
 def ofRatPoly (p : URatPoly) : UAlgPoly :=
@@ -473,6 +477,13 @@ partial def detURatPoly (m : Array (Array URatPoly)) : URatPoly :=
       return acc
 
 
+@[inline] def sylvesterRow (coeffs : Array URatPoly) (deg size offset : Nat) : Array URatPoly :=
+  Id.run do
+    let mut row := Array.replicate size URatPoly.zero
+    for j in [:deg+1] do
+      row := arraySet! row (offset + j) (coeffs[deg - j]!)
+    return row
+
 def sylvesterMatrixAlg (f g : UAlgPoly) : Array (Array URatPoly) :=
   let mf := UAlgPoly.degree f
   let mg := UAlgPoly.degree g
@@ -482,15 +493,9 @@ def sylvesterMatrixAlg (f g : UAlgPoly) : Array (Array URatPoly) :=
   Id.run do
     let mut rows : Array (Array URatPoly) := Array.mkEmpty n
     for i in [:mg] do
-      let mut row := Array.replicate n URatPoly.zero
-      for j in [:mf+1] do
-        row := arraySet! row (i + j) (fCoeffs[mf - j]!)
-      rows := rows.push row
+      rows := rows.push (sylvesterRow fCoeffs mf n i)
     for i in [:mf] do
-      let mut row := Array.replicate n URatPoly.zero
-      for j in [:mg+1] do
-        row := arraySet! row (i + j) (gCoeffs[mg - j]!)
-      rows := rows.push row
+      rows := rows.push (sylvesterRow gCoeffs mg n i)
     return rows
 
 
@@ -617,44 +622,47 @@ def neg (a : AReal) : AReal :=
 def sub (a b : AReal) : AReal :=
   add a (neg b)
 
+@[inline] def mulRatAlg (r : Rat) (p : URatPoly) (lo hi : Rat) : AReal :=
+  if r = 0 then
+    rat 0
+  else
+    let p' := URatPoly.scaleVar p r
+    let lo' := lo * r
+    let hi' := hi * r
+    if lo' <= hi' then alg p' lo' hi' else alg p' hi' lo'
+
+@[inline] def mulAlgAlg (p : URatPoly) (lo1 hi1 : Rat) (q : URatPoly) (lo2 hi2 : Rat)
+    (target : Rat) : AReal :=
+  let f := UAlgPoly.ofRatPoly p
+  let g := polyZXOverX q
+  let r := resultantAlg f g
+  let candidates := [lo1*lo2, lo1*hi2, hi1*lo2, hi1*hi2]
+  let lo := candidates.foldl (fun a b => if b < a then b else a) candidates.head!
+  let hi := candidates.foldl (fun a b => if b > a then b else a) candidates.head!
+  let intervals := URatPoly.isolate r lo hi 60
+  let pick :=
+    intervals.find? (fun iv =>
+      let (a,b) := iv
+      a <= target && target <= b
+    )
+  match pick with
+  | some (l,h) => alg r l h
+  | none =>
+      match intervals with
+      | [] => rat target
+      | iv :: _ => alg r iv.1 iv.2
+
 
 def mul (a b : AReal) : AReal :=
   match a, b with
   | rat r1, rat r2 => rat (r1 * r2)
   | rat r, alg p lo hi =>
-      if r = 0 then rat 0
-      else
-        let p' := URatPoly.scaleVar p r
-        let lo' := lo * r
-        let hi' := hi * r
-        if lo' <= hi' then alg p' lo' hi' else alg p' hi' lo'
+      mulRatAlg r p lo hi
   | alg p lo hi, rat r =>
-      if r = 0 then rat 0
-      else
-        let p' := URatPoly.scaleVar p r
-        let lo' := lo * r
-        let hi' := hi * r
-        if lo' <= hi' then alg p' lo' hi' else alg p' hi' lo'
+      mulRatAlg r p lo hi
   | alg p lo1 hi1, alg q lo2 hi2 =>
-      let f := UAlgPoly.ofRatPoly p
-      let g := polyZXOverX q
-      let r := resultantAlg f g
-      let candidates := [lo1*lo2, lo1*hi2, hi1*lo2, hi1*hi2]
-      let lo := candidates.foldl (fun a b => if b < a then b else a) candidates.head!
-      let hi := candidates.foldl (fun a b => if b > a then b else a) candidates.head!
       let target := approx a * approx b
-      let intervals := URatPoly.isolate r lo hi 60
-      let pick :=
-        intervals.find? (fun iv =>
-          let (a,b) := iv
-          a <= target && target <= b
-        )
-      match pick with
-      | some (l,h) => alg r l h
-      | none =>
-          match intervals with
-          | [] => rat target
-          | iv :: _ => alg r iv.1 iv.2
+      mulAlgAlg p lo1 hi1 q lo2 hi2 target
 
 
 def pow (a : AReal) (n : Nat) : AReal :=
@@ -766,17 +774,20 @@ def sub (p q : Poly) : Poly :=
   add p (neg q)
 
 
+@[inline] def mulTerms (p q : Poly) : Poly :=
+  Id.run do
+    let mut res := zero p.nvars
+    for (k1, v1) in p.terms.toList do
+      for (k2, v2) in q.terms.toList do
+        let exps := addExps k1 k2
+        res := addTerm res exps (v1 * v2)
+    return res
+
 def mul (p q : Poly) : Poly :=
   if p.nvars != q.nvars then
     panic! "Poly.mul: nvars mismatch"
   else
-    Id.run do
-      let mut res := zero p.nvars
-      for (k1, v1) in p.terms.toList do
-        for (k2, v2) in q.terms.toList do
-          let exps := addExps k1 k2
-          res := addTerm res exps (v1 * v2)
-      return res
+    mulTerms p q
 
 
 def pow (p : Poly) (n : Nat) : Poly :=
@@ -919,21 +930,27 @@ def toUnivariate (p : Poly) (mvar : Nat) : Array Poly :=
     return coeffs
 
 
+@[inline] def evalTermApprox (k : Array Nat) (v : Rat) (mvar nvars : Nat)
+    (assign : Std.HashMap Nat AReal) : Nat × Rat :=
+  Id.run do
+    let e := k[mvar]!
+    let mut coeff := AReal.fromRat v
+    for j in [:nvars] do
+      if j != mvar then
+        let exp := k[j]!
+        if exp > 0 then
+          let x := assign.getD j (AReal.fromRat 0)
+          coeff := AReal.mul coeff (AReal.pow x exp)
+    return (e, AReal.approx coeff)
+
 def evalToUnivariateApprox (p : Poly) (mvar : Nat) (assign : Std.HashMap Nat AReal) : URatPoly :=
   let d := degree p mvar
   Id.run do
     let mut coeffs := Array.replicate (d + 1) (0 : Rat)
     for (k, v) in p.terms.toList do
-      let e := k[mvar]!
-      let mut coeff := AReal.fromRat v
-      for j in [:p.nvars] do
-        if j != mvar then
-          let exp := k[j]!
-          if exp > 0 then
-            let x := assign.getD j (AReal.fromRat 0)
-            coeff := AReal.mul coeff (AReal.pow x exp)
+      let (e, av) := evalTermApprox k v mvar p.nvars assign
       let curr := coeffs[e]!
-      coeffs := arraySet coeffs e (curr + AReal.approx coeff)
+      coeffs := arraySet! coeffs e (curr + av)
     return URatPoly.trim { coeffs := coeffs }
 
 
@@ -1189,28 +1206,41 @@ def collectRoots (projs : List Poly) (mvar : Nat) (assign : Std.HashMap Nat ARea
       roots := roots ++ rs
     return mergeCloseRoots roots epsRat
 
+@[inline] def projectionSets (polys : List Poly) (varsSize : Nat) : Array (List Poly) :=
+  if varsSize == 0 then
+    #[]
+  else
+    Id.run do
+      let mut projSets : Array (List Poly) := #[polys]
+      for i in [:varsSize - 1] do
+        let prev := projSets[projSets.size - 1]!
+        let next := hongproj prev i
+        projSets := projSets.push next
+      return projSets
+
+@[inline] def liftSamplesForVar (projs : List Poly) (mvar : Nat)
+    (samplePoints : List (Std.HashMap Nat AReal)) : List (Std.HashMap Nat AReal) :=
+  Id.run do
+    let mut newPoints : List (Std.HashMap Nat AReal) := []
+    for pt in samplePoints do
+      let roots := collectRoots projs mvar pt
+      let samples := makeSamples roots
+      for v in samples do
+        let pt' := pt.insert mvar v
+        newPoints := newPoints.concat pt'
+    return newPoints
+
 
 def cylindricalAlgebraicDecomposition (polys : List Poly) (vars : Array String) : List (Std.HashMap Nat AReal) :=
   if vars.isEmpty then
     []
   else
     Id.run do
-      let mut projSets : Array (List Poly) := #[polys]
-      for i in [:vars.size - 1] do
-        let prev := projSets[projSets.size - 1]!
-        let next := hongproj prev i
-        projSets := projSets.push next
+      let projSets := projectionSets polys vars.size
       let mut samplePoints : List (Std.HashMap Nat AReal) := [{}]
       for i in (List.range vars.size).reverse do
         let projs := projSets[i]!
-        let mut newPoints : List (Std.HashMap Nat AReal) := []
-        for pt in samplePoints do
-          let roots := collectRoots projs i pt
-          let samples := makeSamples roots
-          for v in samples do
-            let pt' := pt.insert i v
-            newPoints := newPoints.concat pt'
-        samplePoints := newPoints
+        samplePoints := liftSamplesForVar projs i samplePoints
       return samplePoints
 
 
