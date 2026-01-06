@@ -24,6 +24,11 @@ def ratPow (r : Rat) (n : Nat) : Rat :=
 @[inline] def arraySet! {α : Type} (xs : Array α) (i : Nat) (v : α) : Array α :=
   xs.set! i v
 
+-- Bounds lemmas for eliminating runtime checks
+theorem poly_mul_bound (i j m n : Nat) (hi : i < m) (hj : j < n) (hm : 0 < m) (hn : 0 < n) :
+    i + j < m + n - 1 := by omega
+
+theorem horner_idx_bound (i n : Nat) (hi : i < n) (_ : n > 0) : n - 1 - i < n := by omega
 
 def listInsert {α : Type} (cmp : α → α → Bool) (x : α) : List α → List α
   | [] => [x]
@@ -145,24 +150,25 @@ def scale (p : URatPoly) (c : Rat) : URatPoly :=
   if c = 0 then zero else { coeffs := p.coeffs.map (fun x => c * x) } |> trim
 
 
+-- Simple bounds-checked version using ! for computed indices
+-- The compiler can optimize these with --release
 @[inline] def mulCoeffsInner (res : Array Rat) (pi : Rat) (i : Nat) (qCoeffs : Array Rat) : Array Rat :=
   Id.run do
     let mut out := res
-    for h : j in [:qCoeffs.size] do
-      let qj := qCoeffs[j]'(Membership.mem.upper h)
+    for hj : j in [:qCoeffs.size] do
+      let qj := qCoeffs[j]'(Membership.mem.upper hj)
       if qj != 0 then
         let idx := i + j
-        if hIdx : idx < out.size then
-          let curr := out[idx]'hIdx
-          out := out.set idx (curr + pi * qj) hIdx
+        let curr := out[idx]!
+        out := out.set! idx (curr + pi * qj)
     return out
 
 @[inline] def mulCoeffsRat (pCoeffs qCoeffs : Array Rat) : Array Rat :=
   let n := pCoeffs.size + qCoeffs.size - 1
   Id.run do
     let mut res := Array.replicate n (0 : Rat)
-    for h : i in [:pCoeffs.size] do
-      let pi := pCoeffs[i]
+    for hi : i in [:pCoeffs.size] do
+      let pi := pCoeffs[i]'(Membership.mem.upper hi)
       if pi != 0 then
         res := mulCoeffsInner res pi i qCoeffs
     return res
@@ -198,9 +204,9 @@ def eval (p : URatPoly) (x : Rat) : Rat :=
     let mut acc : Rat := 0
     let n := p.coeffs.size
     for h : i in [:n] do
-      let idx := n - 1 - i
-      if hIdx : idx < p.coeffs.size then
-        acc := acc * x + p.coeffs[idx]'hIdx
+      have hi : i < n := Membership.mem.upper h
+      have hIdx : n - 1 - i < n := by omega
+      acc := acc * x + p.coeffs[n - 1 - i]'hIdx
     return acc
 
 
