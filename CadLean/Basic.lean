@@ -150,8 +150,10 @@ def derivative (p : URatPoly) : URatPoly :=
 def eval (p : URatPoly) (x : Rat) : Rat :=
   Id.run do
     let mut acc : Rat := 0
-    for c in p.coeffs.reverse do
-      acc := acc * x + c
+    let n := p.coeffs.size
+    for i in [:n] do
+      let idx := n - 1 - i
+      acc := acc * x + p.coeffs[idx]!
     return acc
 
 
@@ -220,10 +222,22 @@ def signVariations (signs : List Int) : Int :=
   | s :: rest => loop rest s 0
 
 
+def signVariationsAt (seq : List URatPoly) (x : Rat) : Int :=
+  let rec loop (lst : List URatPoly) (prev : Int) (count : Int) : Int :=
+    match lst with
+    | [] => count
+    | p :: rest =>
+        let s := signAt p x
+        if s == 0 then
+          loop rest prev count
+        else
+          let count' := if prev != 0 && prev * s < 0 then count + 1 else count
+          loop rest s count'
+  loop seq 0 0
+
+
 def rootCountWith (seq : List URatPoly) (a b : Rat) : Int :=
-  let va := signVariations (seq.map (fun q => signAt q a))
-  let vb := signVariations (seq.map (fun q => signAt q b))
-  va - vb
+  signVariationsAt seq a - signVariationsAt seq b
 
 
 def rootCount (p : URatPoly) (a b : Rat) : Int :=
