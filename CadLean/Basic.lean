@@ -786,15 +786,18 @@ def setExp (exps : Array Nat) (i : Nat) (v : Nat) : Array Nat :=
   arraySet exps i v
 
 
+@[inline] def addTerms (p : Poly) (terms : List (Array Nat × Rat)) : Poly :=
+  Id.run do
+    let mut res := p
+    for (k, v) in terms do
+      res := addTerm res k v
+    return res
+
 def add (p q : Poly) : Poly :=
   if p.nvars != q.nvars then
     panic! "Poly.add: nvars mismatch"
   else
-    Id.run do
-      let mut res := p
-      for (k, v) in q.terms.toList do
-        res := addTerm res k v
-      return res
+    addTerms p q.terms.toList
 
 
 def neg (p : Poly) : Poly :=
@@ -913,7 +916,7 @@ def evalAReal (p : Poly) (assign : Std.HashMap Nat AReal) : AReal :=
     return sum
 
 
-def compareExps (a b : Array Nat) : Ordering :=
+@[inline] def compareExpsLoop (a b : Array Nat) : Ordering :=
   Id.run do
     let n := min a.size b.size
     for i in [:n] do
@@ -924,6 +927,9 @@ def compareExps (a b : Array Nat) : Ordering :=
       if ai > bi then
         return Ordering.gt
     return Ordering.eq
+
+def compareExps (a b : Array Nat) : Ordering :=
+  compareExpsLoop a b
 
 
 def toSortedList (p : Poly) : List (Array Nat × Rat) :=
@@ -1297,23 +1303,32 @@ def assignmentToNameMap (assign : Std.HashMap Nat AReal) (vars : Array String) :
     return res
 
 
-def solvePolySystemCAD (constraints : List Constraint) (vars : Array String) (returnOneSample : Bool := true)
-    : List (Std.HashMap String AReal) :=
-  let polys := constraints.map (fun c => c.poly)
-  let samples := cylindricalAlgebraicDecomposition polys vars
+@[inline] def constraintsHold (constraints : List Constraint) (pt : Std.HashMap Nat AReal) : Bool :=
+  Id.run do
+    let mut ok := true
+    for c in constraints do
+      let v := Poly.evalAReal c.poly pt
+      if !holdsRel c.rel v then
+        ok := false
+    return ok
+
+@[inline] def collectSolutions (constraints : List Constraint) (vars : Array String)
+    (samples : List (Std.HashMap Nat AReal)) (returnOneSample : Bool) :
+    List (Std.HashMap String AReal) :=
   Id.run do
     let mut results : List (Std.HashMap String AReal) := []
     for pt in samples do
-      let mut ok := true
-      for c in constraints do
-        let v := Poly.evalAReal c.poly pt
-        if !holdsRel c.rel v then
-          ok := false
-      if ok then
+      if constraintsHold constraints pt then
         results := results.concat (assignmentToNameMap pt vars)
         if returnOneSample then
           break
     return results
+
+def solvePolySystemCAD (constraints : List Constraint) (vars : Array String) (returnOneSample : Bool := true)
+    : List (Std.HashMap String AReal) :=
+  let polys := constraints.map (fun c => c.poly)
+  let samples := cylindricalAlgebraicDecomposition polys vars
+  collectSolutions constraints vars samples returnOneSample
 
 
 -- Convenience constructors
