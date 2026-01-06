@@ -437,6 +437,19 @@ def ofRatPoly (p : URatPoly) : UAlgPoly :=
 end UAlgPoly
 
 
+@[inline] def minorRowsURatPoly (m : Array (Array URatPoly)) (skipCol : Nat) : Array (Array URatPoly) :=
+  let n := m.size
+  Id.run do
+    let mut rows := Array.mkEmpty (n - 1)
+    for i in [1:n] do
+      let mi := m[i]!
+      let mut r := Array.mkEmpty (n - 1)
+      for k in [:n] do
+        if k != skipCol then
+          r := r.push (mi[k]!)
+      rows := rows.push r
+    return rows
+
 partial def detURatPoly (m : Array (Array URatPoly)) : URatPoly :=
   let n := m.size
   if n == 0 then
@@ -454,15 +467,7 @@ partial def detURatPoly (m : Array (Array URatPoly)) : URatPoly :=
       let mut acc := URatPoly.zero
       for j in [:n] do
         let sign := if (j % 2) == 0 then (1 : Rat) else (-1 : Rat)
-        let mut rows := Array.mkEmpty (n - 1)
-        for i in [:n] do
-          if i != 0 then
-            let mut r := Array.mkEmpty (n - 1)
-            for k in [:n] do
-              if k != j then
-                r := r.push ((m[i]!)[k]!)
-            rows := rows.push r
-        let cofactor := detURatPoly rows
+        let cofactor := detURatPoly (minorRowsURatPoly m j)
         let term := URatPoly.mul (URatPoly.scale (m[0]!)[j]! sign) cofactor
         acc := URatPoly.add acc term
       return acc
@@ -973,6 +978,40 @@ instance : HMul Rat Poly Poly where
 
 -- Determinant for Poly matrices (for PSCs)
 
+@[inline] def minorRowsPoly (m : Array (Array Poly)) (skipCol : Nat) : Array (Array Poly) :=
+  let n := m.size
+  Id.run do
+    let mut rows := Array.mkEmpty (n - 1)
+    for i in [1:n] do
+      let mi := m[i]!
+      let mut r := Array.mkEmpty (n - 1)
+      for k in [:n] do
+        if k != skipCol then
+          r := r.push (mi[k]!)
+      rows := rows.push r
+    return rows
+
+@[inline] def subresultantRow (coeffs : Array Poly) (deg size i nvars : Nat) : Array Poly :=
+  Id.run do
+    let mut row := Array.replicate size (Poly.zero nvars)
+    for j in [:deg+1] do
+      if i + j < size then
+        row := arraySet! row (i + j) (coeffs[deg - j]!)
+    return row
+
+@[inline] def subresultantMatrix (fCoeffs gCoeffs : Array Poly) (df dg k nvars : Nat) :
+    Array (Array Poly) :=
+  Id.run do
+    let rowsF := dg - k
+    let rowsG := df - k
+    let size := df + dg - 2 * k
+    let mut rows := Array.mkEmpty size
+    for i in [:rowsF] do
+      rows := rows.push (subresultantRow fCoeffs df size i nvars)
+    for i in [:rowsG] do
+      rows := rows.push (subresultantRow gCoeffs dg size i nvars)
+    return rows
+
 partial def detPoly (nvars : Nat) (m : Array (Array Poly)) : Poly :=
   let n := m.size
   if n == 0 then
@@ -990,15 +1029,7 @@ partial def detPoly (nvars : Nat) (m : Array (Array Poly)) : Poly :=
       let mut acc := Poly.zero nvars
       for j in [:n] do
         let sign := if (j % 2) == 0 then (1 : Rat) else (-1 : Rat)
-        let mut rows := Array.mkEmpty (n - 1)
-        for i in [:n] do
-          if i != 0 then
-            let mut r := Array.mkEmpty (n - 1)
-            for k in [:n] do
-              if k != j then
-                r := r.push ((m[i]!)[k]!)
-            rows := rows.push r
-        let cofactor := detPoly nvars rows
+        let cofactor := detPoly nvars (minorRowsPoly m j)
         let term := Poly.mul (Poly.scale (m[0]!)[j]! sign) cofactor
         acc := Poly.add acc term
       return acc
@@ -1018,23 +1049,7 @@ def subresultantCoefficients (f g : Poly) (mvar : Nat) : List Poly :=
       let gCoeffs := Poly.toUnivariate g mvar
       let mut res : List Poly := []
       for k in [:dg] do
-        let rowsF := dg - k
-        let rowsG := df - k
-        let size := df + dg - 2 * k
-        let mut rows : Array (Array Poly) := Array.mkEmpty size
-        for i in [:rowsF] do
-          let mut row := Array.replicate size (Poly.zero f.nvars)
-          for j in [:df+1] do
-            if i + j < size then
-              row := arraySet row (i + j) (fCoeffs[df - j]! )
-          rows := rows.push row
-        for i in [:rowsG] do
-          let mut row := Array.replicate size (Poly.zero f.nvars)
-          for j in [:dg+1] do
-            if i + j < size then
-              row := arraySet row (i + j) (gCoeffs[dg - j]! )
-          rows := rows.push row
-        let psc := detPoly f.nvars rows
+        let psc := detPoly f.nvars (subresultantMatrix fCoeffs gCoeffs df dg k f.nvars)
         res := res.concat psc
       let lcPow := (Poly.leadingCoeff g mvar) ^ (df - dg)
       res := res.concat lcPow
