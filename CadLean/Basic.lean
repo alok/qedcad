@@ -236,6 +236,22 @@ def signVariationsAt (seq : List URatPoly) (x : Rat) : Int :=
   loop seq 0 0
 
 
+def signVariationsArray (signs : Array Int) : Int :=
+  Id.run do
+    let mut prev : Int := 0
+    let mut count : Int := 0
+    for s in signs do
+      if s != 0 then
+        if prev != 0 && prev * s < 0 then
+          count := count + 1
+        prev := s
+    return count
+
+
+def signArrayAt (seq : Array URatPoly) (x : Rat) : Array Int :=
+  seq.map (fun p => signAt p x)
+
+
 def rootCountWith (seq : List URatPoly) (a b : Rat) : Int :=
   signVariationsAt seq a - signVariationsAt seq b
 
@@ -260,17 +276,24 @@ def rootBound (p : URatPoly) : Rat :=
       return 1 + m
 
 
-def isolateAuxWith (seq : List URatPoly) (a b : Rat) : Nat → List (Rat × Rat)
+def isolateAuxWithSigns (seq : Array URatPoly) (a b : Rat) (sa sb : Array Int) : Nat → List (Rat × Rat)
   | 0 =>
-      let c := rootCountWith seq a b
+      let c := signVariationsArray sa - signVariationsArray sb
       if c == 0 then [] else [(a, b)]
   | depth + 1 =>
-      let c := rootCountWith seq a b
+      let c := signVariationsArray sa - signVariationsArray sb
       if c == 0 then
         []
       else
         let m := (a + b) / 2
-        isolateAuxWith seq a m depth ++ isolateAuxWith seq m b depth
+        let sm := signArrayAt seq m
+        isolateAuxWithSigns seq a m sa sm depth ++ isolateAuxWithSigns seq m b sm sb depth
+
+
+def isolateAuxWith (seq : List URatPoly) (a b : Rat) : Nat → List (Rat × Rat)
+  | n =>
+      let arr := seq.toArray
+      isolateAuxWithSigns arr a b (signArrayAt arr a) (signArrayAt arr b) n
 
 
 def isolateAux (p : URatPoly) (a b : Rat) : Nat → List (Rat × Rat)
