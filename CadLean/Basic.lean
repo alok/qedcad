@@ -18,8 +18,11 @@ def ratPow (r : Rat) (n : Nat) : Rat :=
   r ^ n
 
 
-def arraySet {α : Type} (xs : Array α) (i : Nat) (v : α) : Array α :=
+@[inline] def arraySet {α : Type} (xs : Array α) (i : Nat) (v : α) : Array α :=
   if h : i < xs.size then xs.set i v h else xs
+
+@[inline] def arraySet! {α : Type} (xs : Array α) (i : Nat) (v : α) : Array α :=
+  xs.set! i v
 
 
 def listInsert {α : Type} (cmp : α → α → Bool) (x : α) : List α → List α
@@ -119,13 +122,20 @@ def mul (p q : URatPoly) : URatPoly :=
   if isZero p || isZero q then
     zero
   else
-    let n := p.coeffs.size + q.coeffs.size - 1
+    let pCoeffs := p.coeffs
+    let qCoeffs := q.coeffs
+    let n := pCoeffs.size + qCoeffs.size - 1
     Id.run do
       let mut res := Array.replicate n (0 : Rat)
-      for i in [:p.coeffs.size] do
-        for j in [:q.coeffs.size] do
-          let curr := res[i + j]!
-          res := arraySet res (i + j) (curr + p.coeffs[i]! * q.coeffs[j]!)
+      for i in [:pCoeffs.size] do
+        let pi := pCoeffs[i]!
+        if pi != 0 then
+          for j in [:qCoeffs.size] do
+            let qj := qCoeffs[j]!
+            if qj != 0 then
+              let idx := i + j
+              let curr := res[idx]!
+              res := arraySet! res idx (curr + pi * qj)
       return trim { coeffs := res }
 
 
@@ -404,13 +414,20 @@ def mul (p q : UAlgPoly) : UAlgPoly :=
   if isZero p || isZero q then
     zero
   else
-    let n := p.coeffs.size + q.coeffs.size - 1
+    let pCoeffs := p.coeffs
+    let qCoeffs := q.coeffs
+    let n := pCoeffs.size + qCoeffs.size - 1
     Id.run do
       let mut res := Array.replicate n URatPoly.zero
-      for i in [:p.coeffs.size] do
-        for j in [:q.coeffs.size] do
-          let curr := res[i + j]!
-          res := arraySet res (i + j) (URatPoly.add curr (URatPoly.mul p.coeffs[i]! q.coeffs[j]!))
+      for i in [:pCoeffs.size] do
+        let pi := pCoeffs[i]!
+        if !URatPoly.isZero pi then
+          for j in [:qCoeffs.size] do
+            let qj := qCoeffs[j]!
+            if !URatPoly.isZero qj then
+              let idx := i + j
+              let curr := res[idx]!
+              res := arraySet! res idx (URatPoly.add curr (URatPoly.mul pi qj))
       return trim { coeffs := res }
 
 
@@ -426,6 +443,12 @@ partial def detURatPoly (m : Array (Array URatPoly)) : URatPoly :=
     URatPoly.const 1
   else if n == 1 then
     (m[0]!)[0]!
+  else if n == 2 then
+    let a := (m[0]!)[0]!
+    let b := (m[0]!)[1]!
+    let c := (m[1]!)[0]!
+    let d := (m[1]!)[1]!
+    URatPoly.sub (URatPoly.mul a d) (URatPoly.mul b c)
   else
     Id.run do
       let mut acc := URatPoly.zero
@@ -448,20 +471,20 @@ partial def detURatPoly (m : Array (Array URatPoly)) : URatPoly :=
 def sylvesterMatrixAlg (f g : UAlgPoly) : Array (Array URatPoly) :=
   let mf := UAlgPoly.degree f
   let mg := UAlgPoly.degree g
-  let fCoeffs := f.coeffs.reverse
-  let gCoeffs := g.coeffs.reverse
+  let fCoeffs := f.coeffs
+  let gCoeffs := g.coeffs
   let n := mf + mg
   Id.run do
     let mut rows : Array (Array URatPoly) := Array.mkEmpty n
     for i in [:mg] do
       let mut row := Array.replicate n URatPoly.zero
       for j in [:mf+1] do
-        row := arraySet row (i + j) (fCoeffs[j]!)
+        row := arraySet! row (i + j) (fCoeffs[mf - j]!)
       rows := rows.push row
     for i in [:mf] do
       let mut row := Array.replicate n URatPoly.zero
       for j in [:mg+1] do
-        row := arraySet row (i + j) (gCoeffs[j]!)
+        row := arraySet! row (i + j) (gCoeffs[mg - j]!)
       rows := rows.push row
     return rows
 
@@ -956,6 +979,12 @@ partial def detPoly (nvars : Nat) (m : Array (Array Poly)) : Poly :=
     Poly.const nvars 1
   else if n == 1 then
     (m[0]!)[0]!
+  else if n == 2 then
+    let a := (m[0]!)[0]!
+    let b := (m[0]!)[1]!
+    let c := (m[1]!)[0]!
+    let d := (m[1]!)[1]!
+    Poly.sub (Poly.mul a d) (Poly.mul b c)
   else
     Id.run do
       let mut acc := Poly.zero nvars
