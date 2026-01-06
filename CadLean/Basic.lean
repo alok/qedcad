@@ -144,6 +144,17 @@ def scale (p : URatPoly) (c : Rat) : URatPoly :=
   if c = 0 then zero else { coeffs := p.coeffs.map (fun x => c * x) } |> trim
 
 
+@[inline] def mulCoeffsInner (res : Array Rat) (pi : Rat) (i : Nat) (qCoeffs : Array Rat) : Array Rat :=
+  Id.run do
+    let mut out := res
+    for j in [:qCoeffs.size] do
+      let qj := qCoeffs[j]!
+      if qj != 0 then
+        let idx := i + j
+        let curr := out[idx]!
+        out := arraySet! out idx (curr + pi * qj)
+    return out
+
 @[inline] def mulCoeffsRat (pCoeffs qCoeffs : Array Rat) : Array Rat :=
   let n := pCoeffs.size + qCoeffs.size - 1
   Id.run do
@@ -151,12 +162,7 @@ def scale (p : URatPoly) (c : Rat) : URatPoly :=
     for i in [:pCoeffs.size] do
       let pi := pCoeffs[i]!
       if pi != 0 then
-        for j in [:qCoeffs.size] do
-          let qj := qCoeffs[j]!
-          if qj != 0 then
-            let idx := i + j
-            let curr := res[idx]!
-            res := arraySet! res idx (curr + pi * qj)
+        res := mulCoeffsInner res pi i qCoeffs
     return res
 
 def mul (p q : URatPoly) : URatPoly :=
@@ -347,6 +353,16 @@ def realRootsIsolate (p : URatPoly) (depth : Nat := 60) : List (Rat × Rat) :=
     isolate p (-bound) bound depth
 
 
+@[inline] def shiftTermContrib (coeffs : Array Rat) (ci : Rat) (a : Rat) (i : Nat) : Array Rat :=
+  Id.run do
+    let mut out := coeffs
+    for k in [:i+1] do
+      let bin := ratOfNat (binom i k)
+      let term := ci * bin * ratPow (-a) (i - k)
+      let curr := out[k]!
+      out := arraySet! out k (curr + term)
+    return out
+
 @[inline] def shiftCoeffs (p : URatPoly) (a : Rat) : Array Rat :=
   let d := degree p
   Id.run do
@@ -354,11 +370,7 @@ def realRootsIsolate (p : URatPoly) (depth : Nat := 60) : List (Rat × Rat) :=
     for i in [:d+1] do
       let ci := p.coeffs[i]!
       if ci != 0 then
-        for k in [:i+1] do
-          let bin := ratOfNat (binom i k)
-          let term := ci * bin * ratPow (-a) (i - k)
-          let curr := coeffs[k]!
-          coeffs := arraySet! coeffs k (curr + term)
+        coeffs := shiftTermContrib coeffs ci a i
     return coeffs
 
 def shift (p : URatPoly) (a : Rat) : URatPoly :=
@@ -436,6 +448,18 @@ def scale (p : UAlgPoly) (c : URatPoly) : UAlgPoly :=
   if URatPoly.isZero c then zero else { coeffs := p.coeffs.map (fun x => URatPoly.mul c x) } |> trim
 
 
+@[inline] def mulCoeffsAlgInner (res : Array URatPoly) (pi : URatPoly) (i : Nat)
+    (qCoeffs : Array URatPoly) : Array URatPoly :=
+  Id.run do
+    let mut out := res
+    for j in [:qCoeffs.size] do
+      let qj := qCoeffs[j]!
+      if !URatPoly.isZero qj then
+        let idx := i + j
+        let curr := out[idx]!
+        out := arraySet! out idx (URatPoly.add curr (URatPoly.mul pi qj))
+    return out
+
 @[inline] def mulCoeffsAlg (pCoeffs qCoeffs : Array URatPoly) : Array URatPoly :=
   let n := pCoeffs.size + qCoeffs.size - 1
   Id.run do
@@ -443,12 +467,7 @@ def scale (p : UAlgPoly) (c : URatPoly) : UAlgPoly :=
     for i in [:pCoeffs.size] do
       let pi := pCoeffs[i]!
       if !URatPoly.isZero pi then
-        for j in [:qCoeffs.size] do
-          let qj := qCoeffs[j]!
-          if !URatPoly.isZero qj then
-            let idx := i + j
-            let curr := res[idx]!
-            res := arraySet! res idx (URatPoly.add curr (URatPoly.mul pi qj))
+        res := mulCoeffsAlgInner res pi i qCoeffs
     return res
 
 def mul (p q : UAlgPoly) : UAlgPoly :=
