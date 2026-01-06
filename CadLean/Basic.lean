@@ -105,6 +105,29 @@ def add (p q : URatPoly) : URatPoly :=
       res := arraySet res i (a + b)
     return trim { coeffs := res }
 
+@[inline] def addMonomialCoeffs (coeffs : Array Rat) (shift : Nat) (c : Rat) : Array Rat :=
+  if c = 0 then
+    coeffs
+  else
+    let size := coeffs.size
+    let out :=
+      if shift < size then
+        coeffs
+      else
+        coeffs ++ Array.replicate (shift + 1 - size) (0 : Rat)
+    let curr := out[shift]!
+    arraySet! out shift (curr + c)
+
+@[inline] def mulMonomialCoeffs (coeffs : Array Rat) (shift : Nat) (c : Rat) : Array Rat :=
+  if c = 0 || coeffs.isEmpty then
+    #[]
+  else
+    Id.run do
+      let mut out := Array.replicate (coeffs.size + shift) (0 : Rat)
+      for i in [:coeffs.size] do
+        out := arraySet! out (i + shift) (c * coeffs[i]!)
+      return out
+
 
 def neg (p : URatPoly) : URatPoly :=
   { coeffs := p.coeffs.map (fun c => -c) }
@@ -177,18 +200,16 @@ def divRem (p q : URatPoly) : URatPoly × URatPoly :=
     let qlc := leadingCoeff q
     Id.run do
       let mut r := p
-      let mut qout := zero
+      let mut qoutCoeffs : Array Rat := #[]
       while !isZero r && degree r >= qdeg do
         let rdeg := degree r
         let rlc := leadingCoeff r
         let shift := rdeg - qdeg
         let coeff := rlc / qlc
-        let mut termCoeffs := Array.replicate (shift + 1) (0 : Rat)
-        termCoeffs := arraySet termCoeffs shift coeff
-        let term : URatPoly := { coeffs := termCoeffs }
-        qout := add qout term
-        r := sub r (mul term q)
-      return (trim qout, trim r)
+        qoutCoeffs := addMonomialCoeffs qoutCoeffs shift coeff
+        let term := { coeffs := mulMonomialCoeffs q.coeffs shift coeff }
+        r := sub r term
+      return (trim { coeffs := qoutCoeffs }, trim r)
 
 
 @[inline] def sturmNext (a b : URatPoly) : Option URatPoly :=
