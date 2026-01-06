@@ -490,17 +490,20 @@ def ofRatPoly (p : URatPoly) : UAlgPoly :=
 end UAlgPoly
 
 
+@[inline] def minorRowURatPoly (mi : Array URatPoly) (n skipCol : Nat) : Array URatPoly :=
+  Id.run do
+    let mut r := Array.mkEmpty (n - 1)
+    for k in [:n] do
+      if k != skipCol then
+        r := r.push (mi[k]!)
+    return r
+
 @[inline] def minorRowsURatPoly (m : Array (Array URatPoly)) (skipCol : Nat) : Array (Array URatPoly) :=
   let n := m.size
   Id.run do
     let mut rows := Array.mkEmpty (n - 1)
     for i in [1:n] do
-      let mi := m[i]!
-      let mut r := Array.mkEmpty (n - 1)
-      for k in [:n] do
-        if k != skipCol then
-          r := r.push (mi[k]!)
-      rows := rows.push r
+      rows := rows.push (minorRowURatPoly m[i]! n skipCol)
     return rows
 
 mutual
@@ -927,17 +930,21 @@ def derivative (p : Poly) (i : Nat) : Poly :=
     return res
 
 
-def evalAReal (p : Poly) (assign : Std.HashMap Nat AReal) : AReal :=
+@[inline] def evalTermAReal (k : Array Nat) (v : Rat) (assign : Std.HashMap Nat AReal) (nvars : Nat) : AReal :=
+  Id.run do
+    let mut term := AReal.fromRat v
+    for j in [:nvars] do
+      let e := k[j]!
+      if e > 0 then
+        let x := assign.getD j (AReal.fromRat 0)
+        term := AReal.mul term (AReal.pow x e)
+    return term
+
+@[inline] def evalAReal (p : Poly) (assign : Std.HashMap Nat AReal) : AReal :=
   Id.run do
     let mut sum := AReal.fromRat 0
     for (k, v) in p.terms.toList do
-      let mut term := AReal.fromRat v
-      for j in [:p.nvars] do
-        let e := k[j]!
-        if e > 0 then
-          let x := assign.getD j (AReal.fromRat 0)
-          term := AReal.mul term (AReal.pow x e)
-      sum := AReal.add sum term
+      sum := AReal.add sum (evalTermAReal k v assign p.nvars)
     return sum
 
 
@@ -1064,17 +1071,20 @@ instance : HMul Rat Poly Poly where
 
 -- Determinant for Poly matrices (for PSCs)
 
+@[inline] def minorRowPoly (mi : Array Poly) (n skipCol : Nat) : Array Poly :=
+  Id.run do
+    let mut r := Array.mkEmpty (n - 1)
+    for k in [:n] do
+      if k != skipCol then
+        r := r.push (mi[k]!)
+    return r
+
 @[inline] def minorRowsPoly (m : Array (Array Poly)) (skipCol : Nat) : Array (Array Poly) :=
   let n := m.size
   Id.run do
     let mut rows := Array.mkEmpty (n - 1)
     for i in [1:n] do
-      let mi := m[i]!
-      let mut r := Array.mkEmpty (n - 1)
-      for k in [:n] do
-        if k != skipCol then
-          r := r.push (mi[k]!)
-      rows := rows.push r
+      rows := rows.push (minorRowPoly m[i]! n skipCol)
     return rows
 
 @[inline] def subresultantRow (coeffs : Array Poly) (deg size i nvars : Nat) : Array Poly :=
@@ -1180,8 +1190,7 @@ def projtwo (F : List Poly) (mvar : Nat) : List Poly :=
     return acc
 
 
-def hongproj (F : List Poly) (mvar : Nat) : List Poly :=
-  let proj := projone F mvar ++ projtwo F mvar
+@[inline] def filterUniqPolys (proj : List Poly) : List Poly :=
   Id.run do
     let mut uniq : List Poly := []
     for p in proj do
@@ -1192,6 +1201,9 @@ def hongproj (F : List Poly) (mvar : Nat) : List Poly :=
         continue
       uniq := uniq.concat p'
     return uniq
+
+@[inline] def hongproj (F : List Poly) (mvar : Nat) : List Poly :=
+  filterUniqPolys (projone F mvar ++ projtwo F mvar)
 
 
 -- CAD lifting and solving
