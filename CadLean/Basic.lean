@@ -95,15 +95,18 @@ def leadingCoeff (p : URatPoly) : Rat :=
   if isZero p then 0 else p.coeffs[p.coeffs.size - 1]!
 
 
-def add (p q : URatPoly) : URatPoly :=
-  let n := max p.coeffs.size q.coeffs.size
+@[inline] def addCoeffsLoop (pCoeffs qCoeffs : Array Rat) (n : Nat) : Array Rat :=
   Id.run do
     let mut res := Array.replicate n (0 : Rat)
     for i in [:n] do
-      let a := if i < p.coeffs.size then p.coeffs[i]! else 0
-      let b := if i < q.coeffs.size then q.coeffs[i]! else 0
+      let a := if i < pCoeffs.size then pCoeffs[i]! else 0
+      let b := if i < qCoeffs.size then qCoeffs[i]! else 0
       res := arraySet res i (a + b)
-    return trim { coeffs := res }
+    return res
+
+def add (p q : URatPoly) : URatPoly :=
+  let n := max p.coeffs.size q.coeffs.size
+  trim { coeffs := addCoeffsLoop p.coeffs q.coeffs n }
 
 @[inline] def addMonomialCoeffs (coeffs : Array Rat) (shift : Nat) (c : Rat) : Array Rat :=
   if c = 0 then
@@ -1101,25 +1104,25 @@ partial def detPoly (nvars : Nat) (m : Array (Array Poly)) : Poly :=
 end
 
 
+@[inline] def subresultantPSCsLoop (fCoeffs gCoeffs : Array Poly) (df dg nvars : Nat) : List Poly :=
+  Id.run do
+    let mut res : List Poly := []
+    for k in [:dg] do
+      let psc := detPoly nvars (subresultantMatrix fCoeffs gCoeffs df dg k nvars)
+      res := res.concat psc
+    return res
+
 def subresultantCoefficients (f g : Poly) (mvar : Nat) : List Poly :=
-  -- PSCs via subresultant matrices (slow but exact)
   let df := Poly.degree f mvar
   let dg := Poly.degree g mvar
-  if dg == 0 then
-    []
+  if dg == 0 then []
   else
-    let (f, g, df, dg) :=
-      if df < dg then (g, f, dg, df) else (f, g, df, dg)
-    Id.run do
-      let fCoeffs := Poly.toUnivariate f mvar
-      let gCoeffs := Poly.toUnivariate g mvar
-      let mut res : List Poly := []
-      for k in [:dg] do
-        let psc := detPoly f.nvars (subresultantMatrix fCoeffs gCoeffs df dg k f.nvars)
-        res := res.concat psc
-      let lcPow := (Poly.leadingCoeff g mvar) ^ (df - dg)
-      res := res.concat lcPow
-      return res
+    let (f, g, df, dg) := if df < dg then (g, f, dg, df) else (f, g, df, dg)
+    let fCoeffs := Poly.toUnivariate f mvar
+    let gCoeffs := Poly.toUnivariate g mvar
+    let pscs := subresultantPSCsLoop fCoeffs gCoeffs df dg f.nvars
+    let lcPow := (Poly.leadingCoeff g mvar) ^ (df - dg)
+    pscs.concat lcPow
 
 
 def projone (F : List Poly) (mvar : Nat) : List Poly :=
@@ -1204,32 +1207,27 @@ def getNiceRoots (p : URatPoly) : List AReal :=
   listSort (fun a b => AReal.approx a < AReal.approx b) roots
 
 
+@[inline] def getSampleBetween (a' b' : Rat) : Rat :=
+  if a' == b' then
+    a'
+  else if a' < 0 && 0 < b' then
+    if ratAbs a' <= epsRat || ratAbs b' <= epsRat then (a' + b') / 2 else 0
+  else
+    let mid := (a' + b') / 2
+    let flo := Rat.ofInt (Rat.floor mid)
+    let cei := Rat.ofInt (Rat.ceil mid)
+    if a' < flo && flo < b' then flo
+    else if a' < cei && cei < b' then cei
+    else mid
+
 def getSamplePoint (l r : Option Rat) : Rat :=
   match l, r with
   | none, none => 0
-  | none, some b =>
-      Rat.ofInt (Rat.floor b) - 1
-  | some a, none =>
-      Rat.ofInt (Rat.ceil a) + 1
+  | none, some b => Rat.ofInt (Rat.floor b) - 1
+  | some a, none => Rat.ofInt (Rat.ceil a) + 1
   | some a, some b =>
       let (a', b') := if a > b then (b, a) else (a, b)
-      if a' == b' then
-        a'
-      else if a' < 0 && 0 < b' then
-        if ratAbs a' <= epsRat || ratAbs b' <= epsRat then
-          (a' + b') / 2
-        else
-          0
-      else
-        let mid := (a' + b') / 2
-        let flo := Rat.ofInt (Rat.floor mid)
-        let cei := Rat.ofInt (Rat.ceil mid)
-        if a' < flo && flo < b' then
-          flo
-        else if a' < cei && cei < b' then
-          cei
-        else
-          mid
+      getSampleBetween a' b'
 
 
 def makeSamples (roots : List AReal) : List AReal :=

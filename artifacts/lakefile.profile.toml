@@ -1,0 +1,22 @@
+name = "cad_lean"
+version = "0.1.0"
+defaultTargets = ["CadLean"]
+benchDriver = "LeanBench/leanbench"
+
+[[require]]
+name = "LeanBench"
+path = "../leanbench"
+
+[[lean_lib]]
+name = "CadLean"
+
+[[lean_exe]]
+name = "cadbench"
+root = "Main"
+
+moreLeanArgs = [
+  "-Dtrace.profiler=true",
+  "-Dtrace.profiler.useHeartbeats=true",
+  "-Dtrace.profiler.threshold=1",
+  "-Dtrace.profiler.output=artifacts/trace-profiler.json"
+]
