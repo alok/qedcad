@@ -454,6 +454,8 @@ end UAlgPoly
       rows := rows.push r
     return rows
 
+mutual
+
 partial def detURatPoly (m : Array (Array URatPoly)) : URatPoly :=
   let n := m.size
   if n == 0 then
@@ -467,14 +469,20 @@ partial def detURatPoly (m : Array (Array URatPoly)) : URatPoly :=
     let d := (m[1]!)[1]!
     URatPoly.sub (URatPoly.mul a d) (URatPoly.mul b c)
   else
-    Id.run do
-      let mut acc := URatPoly.zero
-      for j in [:n] do
-        let sign := if (j % 2) == 0 then (1 : Rat) else (-1 : Rat)
-        let cofactor := detURatPoly (minorRowsURatPoly m j)
-        let term := URatPoly.mul (URatPoly.scale (m[0]!)[j]! sign) cofactor
-        acc := URatPoly.add acc term
-      return acc
+    detURatPolyLaplace m
+
+@[inline] partial def detURatPolyLaplace (m : Array (Array URatPoly)) : URatPoly :=
+  let n := m.size
+  Id.run do
+    let mut acc := URatPoly.zero
+    for j in [:n] do
+      let sign := if (j % 2) == 0 then (1 : Rat) else (-1 : Rat)
+      let cofactor := detURatPoly (minorRowsURatPoly m j)
+      let term := URatPoly.mul (URatPoly.scale (m[0]!)[j]! sign) cofactor
+      acc := URatPoly.add acc term
+    return acc
+
+end
 
 
 @[inline] def sylvesterRow (coeffs : Array URatPoly) (deg size offset : Nat) : Array URatPoly :=
@@ -504,6 +512,18 @@ def resultantAlg (f g : UAlgPoly) : URatPoly :=
   detURatPoly mat
 
 
+@[inline] def polyZMinusXUpdate (coeffs : Array URatPoly) (i : Nat) (qi : Rat) : Array URatPoly :=
+  Id.run do
+    let mut out := coeffs
+    for k in [:i+1] do
+      let bin := ratOfNat (binom i k)
+      let coeff := qi * bin * ratPow (-1 : Rat) k
+      let zpow := URatPoly.monomial (i - k) 1
+      let term := URatPoly.scale zpow coeff
+      let curr := out[k]!
+      out := arraySet! out k (URatPoly.add curr term)
+    return out
+
 def polyZMinusX (q : URatPoly) : UAlgPoly :=
   -- q(z - x) as polynomial in x with coeffs in z
   let n := URatPoly.degree q
@@ -512,13 +532,7 @@ def polyZMinusX (q : URatPoly) : UAlgPoly :=
     for i in [:n+1] do
       let qi := q.coeffs[i]!
       if qi != 0 then
-        for k in [:i+1] do
-          let bin := ratOfNat (binom i k)
-          let coeff := qi * bin * ratPow (-1 : Rat) k
-          let zpow := URatPoly.monomial (i - k) 1
-          let term := URatPoly.scale zpow coeff
-          let curr := coeffs[k]!
-          coeffs := arraySet coeffs k (URatPoly.add curr term)
+        coeffs := polyZMinusXUpdate coeffs i qi
     return UAlgPoly.trim { coeffs := coeffs }
 
 
@@ -1029,6 +1043,8 @@ instance : HMul Rat Poly Poly where
       rows := rows.push (subresultantRow gCoeffs dg size i nvars)
     return rows
 
+mutual
+
 partial def detPoly (nvars : Nat) (m : Array (Array Poly)) : Poly :=
   let n := m.size
   if n == 0 then
@@ -1042,14 +1058,20 @@ partial def detPoly (nvars : Nat) (m : Array (Array Poly)) : Poly :=
     let d := (m[1]!)[1]!
     Poly.sub (Poly.mul a d) (Poly.mul b c)
   else
-    Id.run do
-      let mut acc := Poly.zero nvars
-      for j in [:n] do
-        let sign := if (j % 2) == 0 then (1 : Rat) else (-1 : Rat)
-        let cofactor := detPoly nvars (minorRowsPoly m j)
-        let term := Poly.mul (Poly.scale (m[0]!)[j]! sign) cofactor
-        acc := Poly.add acc term
-      return acc
+    detPolyLaplace nvars m
+
+@[inline] partial def detPolyLaplace (nvars : Nat) (m : Array (Array Poly)) : Poly :=
+  let n := m.size
+  Id.run do
+    let mut acc := Poly.zero nvars
+    for j in [:n] do
+      let sign := if (j % 2) == 0 then (1 : Rat) else (-1 : Rat)
+      let cofactor := detPoly nvars (minorRowsPoly m j)
+      let term := Poly.mul (Poly.scale (m[0]!)[j]! sign) cofactor
+      acc := Poly.add acc term
+    return acc
+
+end
 
 
 def subresultantCoefficients (f g : Poly) (mvar : Nat) : List Poly :=
