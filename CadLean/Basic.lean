@@ -1085,18 +1085,21 @@ instance : HMul Rat Poly Poly where
         row := arraySet! row (i + j) (coeffs[deg - j]!)
     return row
 
+@[inline] def buildSubresRows (coeffs : Array Poly) (deg size : Nat) (count : Nat) (nvars : Nat)
+    (rows : Array (Array Poly)) : Array (Array Poly) :=
+  Id.run do
+    let mut out := rows
+    for i in [:count] do
+      out := out.push (subresultantRow coeffs deg size i nvars)
+    return out
+
 @[inline] def subresultantMatrix (fCoeffs gCoeffs : Array Poly) (df dg k nvars : Nat) :
     Array (Array Poly) :=
-  Id.run do
-    let rowsF := dg - k
-    let rowsG := df - k
-    let size := df + dg - 2 * k
-    let mut rows := Array.mkEmpty size
-    for i in [:rowsF] do
-      rows := rows.push (subresultantRow fCoeffs df size i nvars)
-    for i in [:rowsG] do
-      rows := rows.push (subresultantRow gCoeffs dg size i nvars)
-    return rows
+  let rowsF := dg - k
+  let rowsG := df - k
+  let size := df + dg - 2 * k
+  let rows := buildSubresRows fCoeffs df size rowsF nvars (Array.mkEmpty size)
+  buildSubresRows gCoeffs dg size rowsG nvars rows
 
 mutual
 

@@ -35,7 +35,7 @@ As you can see, it returns satisfying points for the first three systems. Predic
 
 ## Lean 4 reimplementation
 
-This repo now includes a **pure Lean 4** reimplementation of the CAD algorithm. The code lives in `CadLean/Basic.lean` and exposes a small API around `solvePolySystemCAD`. It is intentionally **slow but complete**, using Hong’s projection (reducta + principal subresultant coefficients) and a Sturm-sequence root isolation with rational bisection. Projection PSCs are computed via subresultant determinants (exact but very slow). Sample points include rational midpoints and algebraic roots represented as `(poly, interval)` (see `AReal`). When lifting, coefficients are specialized by algebraic assignments and then approximated by rational midpoints to keep root isolation in `URatPoly`.
+This repo now includes a **pure Lean 4** reimplementation of the CAD algorithm, ported from [mmaaz-git/cad](https://github.com/mmaaz-git/cad). The code lives in `CadLean/Basic.lean` and exposes a small API around `solvePolySystemCAD`. It is intentionally **slow but complete**, using Hong’s projection (reducta + principal subresultant coefficients) and a Sturm-sequence root isolation with rational bisection. Projection PSCs are computed via subresultant determinants (exact but very slow). Sample points include rational midpoints and algebraic roots represented as `(poly, interval)` (see `AReal`). When lifting, coefficients are specialized by algebraic assignments and then approximated by rational midpoints to keep root isolation in `URatPoly`.
 
 Build:
 
@@ -44,3 +44,14 @@ lake build
 ```
 
 You can inspect the examples in `CadLean/Basic.lean` (`example1`, `example2`) as a starting point.
+
+## References
+
+The Lean 4 implementation is a port of the Python CAD implementation by [Muhammad Maaz](https://github.com/mmaaz-git).
+
+Key references for the CAD algorithm:
+
+- Collins, G.E. (1975). "Quantifier elimination for real closed fields by cylindrical algebraic decomposition". In: *Automata Theory and Formal Languages*, LNCS 33, pp. 134-183.
+- Hong, H. (1990). "An improvement of the projection operator in cylindrical algebraic decomposition". In: *ISSAC '90*, pp. 261-264.
+- Brown, C.W. (1999). "Guaranteed solution formula construction". PhD thesis, University of Delaware.
+- Brown, C.W. (2003). "QEPCAD B: a program for computing with semi-algebraic sets using CADs". *ACM SIGSAM Bulletin* 37(4), pp. 97-108.
