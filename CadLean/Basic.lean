@@ -638,6 +638,26 @@ def sign (x : AReal) (iters : Nat := 40) : Int :=
       refine lo hi iters
 
 
+@[inline] def pickIntervalForTarget (intervals : List (Rat × Rat)) (target : Rat)
+    (r : URatPoly) : AReal :=
+  let pick := intervals.find? (fun iv => let (a,b) := iv; a <= target && target <= b)
+  match pick with
+  | some (l,h) => alg r l h
+  | none =>
+      match intervals with
+      | [] => rat target
+      | iv :: _ => alg r iv.1 iv.2
+
+@[inline] def addAlgAlg (p : URatPoly) (lo1 hi1 : Rat) (q : URatPoly) (lo2 hi2 : Rat)
+    (target : Rat) : AReal :=
+  let f := UAlgPoly.ofRatPoly p
+  let g := polyZMinusX q
+  let r := resultantAlg f g
+  let lo := lo1 + lo2
+  let hi := hi1 + hi2
+  let intervals := URatPoly.isolate r lo hi 60
+  pickIntervalForTarget intervals target r
+
 def add (a b : AReal) : AReal :=
   match a, b with
   | rat r1, rat r2 => rat (r1 + r2)
@@ -648,24 +668,7 @@ def add (a b : AReal) : AReal :=
       let p' := URatPoly.shift p r
       alg p' (lo + r) (hi + r)
   | alg p lo1 hi1, alg q lo2 hi2 =>
-      let f := UAlgPoly.ofRatPoly p
-      let g := polyZMinusX q
-      let r := resultantAlg f g
-      let lo := lo1 + lo2
-      let hi := hi1 + hi2
-      let target := approx a + approx b
-      let intervals := URatPoly.isolate r lo hi 60
-      let pick :=
-        intervals.find? (fun iv =>
-          let (a,b) := iv
-          a <= target && target <= b
-        )
-      match pick with
-      | some (l,h) => alg r l h
-      | none =>
-          match intervals with
-          | [] => rat target
-          | iv :: _ => alg r iv.1 iv.2
+      addAlgAlg p lo1 hi1 q lo2 hi2 (approx a + approx b)
 
 
 def neg (a : AReal) : AReal :=
@@ -688,26 +691,20 @@ def sub (a b : AReal) : AReal :=
     let hi' := hi * r
     if lo' <= hi' then alg p' lo' hi' else alg p' hi' lo'
 
+@[inline] def mulBoundsMinMax (lo1 hi1 lo2 hi2 : Rat) : Rat × Rat :=
+  let candidates := [lo1*lo2, lo1*hi2, hi1*lo2, hi1*hi2]
+  let lo := candidates.foldl (fun a b => if b < a then b else a) candidates.head!
+  let hi := candidates.foldl (fun a b => if b > a then b else a) candidates.head!
+  (lo, hi)
+
 @[inline] def mulAlgAlg (p : URatPoly) (lo1 hi1 : Rat) (q : URatPoly) (lo2 hi2 : Rat)
     (target : Rat) : AReal :=
   let f := UAlgPoly.ofRatPoly p
   let g := polyZXOverX q
   let r := resultantAlg f g
-  let candidates := [lo1*lo2, lo1*hi2, hi1*lo2, hi1*hi2]
-  let lo := candidates.foldl (fun a b => if b < a then b else a) candidates.head!
-  let hi := candidates.foldl (fun a b => if b > a then b else a) candidates.head!
+  let (lo, hi) := mulBoundsMinMax lo1 hi1 lo2 hi2
   let intervals := URatPoly.isolate r lo hi 60
-  let pick :=
-    intervals.find? (fun iv =>
-      let (a,b) := iv
-      a <= target && target <= b
-    )
-  match pick with
-  | some (l,h) => alg r l h
-  | none =>
-      match intervals with
-      | [] => rat target
-      | iv :: _ => alg r iv.1 iv.2
+  pickIntervalForTarget intervals target r
 
 
 def mul (a b : AReal) : AReal :=
