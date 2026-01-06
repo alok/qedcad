@@ -98,10 +98,11 @@ def leadingCoeff (p : URatPoly) : Rat :=
 @[inline] def addCoeffsLoop (pCoeffs qCoeffs : Array Rat) (n : Nat) : Array Rat :=
   Id.run do
     let mut res := Array.replicate n (0 : Rat)
-    for i in [:n] do
-      let a := if i < pCoeffs.size then pCoeffs[i]! else 0
-      let b := if i < qCoeffs.size then qCoeffs[i]! else 0
-      res := arraySet res i (a + b)
+    for h : i in [:n] do
+      let a := if hp : i < pCoeffs.size then pCoeffs[i]'hp else 0
+      let b := if hq : i < qCoeffs.size then qCoeffs[i]'hq else 0
+      if hr : i < res.size then
+        res := res.set i (a + b) hr
     return res
 
 def add (p q : URatPoly) : URatPoly :=
@@ -147,20 +148,21 @@ def scale (p : URatPoly) (c : Rat) : URatPoly :=
 @[inline] def mulCoeffsInner (res : Array Rat) (pi : Rat) (i : Nat) (qCoeffs : Array Rat) : Array Rat :=
   Id.run do
     let mut out := res
-    for j in [:qCoeffs.size] do
-      let qj := qCoeffs[j]!
+    for h : j in [:qCoeffs.size] do
+      let qj := qCoeffs[j]'(Membership.mem.upper h)
       if qj != 0 then
         let idx := i + j
-        let curr := out[idx]!
-        out := arraySet! out idx (curr + pi * qj)
+        if hIdx : idx < out.size then
+          let curr := out[idx]'hIdx
+          out := out.set idx (curr + pi * qj) hIdx
     return out
 
 @[inline] def mulCoeffsRat (pCoeffs qCoeffs : Array Rat) : Array Rat :=
   let n := pCoeffs.size + qCoeffs.size - 1
   Id.run do
     let mut res := Array.replicate n (0 : Rat)
-    for i in [:pCoeffs.size] do
-      let pi := pCoeffs[i]!
+    for h : i in [:pCoeffs.size] do
+      let pi := pCoeffs[i]
       if pi != 0 then
         res := mulCoeffsInner res pi i qCoeffs
     return res
@@ -195,9 +197,10 @@ def eval (p : URatPoly) (x : Rat) : Rat :=
   Id.run do
     let mut acc : Rat := 0
     let n := p.coeffs.size
-    for i in [:n] do
+    for h : i in [:n] do
       let idx := n - 1 - i
-      acc := acc * x + p.coeffs[idx]!
+      if hIdx : idx < p.coeffs.size then
+        acc := acc * x + p.coeffs[idx]'hIdx
     return acc
 
 
@@ -458,20 +461,21 @@ def scale (p : UAlgPoly) (c : URatPoly) : UAlgPoly :=
     (qCoeffs : Array URatPoly) : Array URatPoly :=
   Id.run do
     let mut out := res
-    for j in [:qCoeffs.size] do
-      let qj := qCoeffs[j]!
+    for h : j in [:qCoeffs.size] do
+      let qj := qCoeffs[j]'(Membership.mem.upper h)
       if !URatPoly.isZero qj then
         let idx := i + j
-        let curr := out[idx]!
-        out := arraySet! out idx (URatPoly.add curr (URatPoly.mul pi qj))
+        if hIdx : idx < out.size then
+          let curr := out[idx]'hIdx
+          out := out.set idx (URatPoly.add curr (URatPoly.mul pi qj)) hIdx
     return out
 
 @[inline] def mulCoeffsAlg (pCoeffs qCoeffs : Array URatPoly) : Array URatPoly :=
   let n := pCoeffs.size + qCoeffs.size - 1
   Id.run do
     let mut res := Array.replicate n URatPoly.zero
-    for i in [:pCoeffs.size] do
-      let pi := pCoeffs[i]!
+    for h : i in [:pCoeffs.size] do
+      let pi := pCoeffs[i]'(Membership.mem.upper h)
       if !URatPoly.isZero pi then
         res := mulCoeffsAlgInner res pi i qCoeffs
     return res
