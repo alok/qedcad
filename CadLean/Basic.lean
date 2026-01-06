@@ -201,6 +201,16 @@ def eval (p : URatPoly) (x : Rat) : Rat :=
     return acc
 
 
+@[inline] def divRemStep (r : URatPoly) (qCoeffs : Array Rat) (qdeg : Nat) (qlc : Rat)
+    (qoutCoeffs : Array Rat) : URatPoly × Array Rat :=
+  let rdeg := degree r
+  let rlc := leadingCoeff r
+  let shift := rdeg - qdeg
+  let coeff := rlc / qlc
+  let qoutCoeffs' := addMonomialCoeffs qoutCoeffs shift coeff
+  let term : URatPoly := { coeffs := mulMonomialCoeffs qCoeffs shift coeff }
+  (sub r term, qoutCoeffs')
+
 def divRem (p q : URatPoly) : URatPoly × URatPoly :=
   if isZero q then
     (zero, p)
@@ -211,13 +221,9 @@ def divRem (p q : URatPoly) : URatPoly × URatPoly :=
       let mut r := p
       let mut qoutCoeffs : Array Rat := #[]
       while !isZero r && degree r >= qdeg do
-        let rdeg := degree r
-        let rlc := leadingCoeff r
-        let shift := rdeg - qdeg
-        let coeff := rlc / qlc
-        qoutCoeffs := addMonomialCoeffs qoutCoeffs shift coeff
-        let term := { coeffs := mulMonomialCoeffs q.coeffs shift coeff }
-        r := sub r term
+        let (r', q') := divRemStep r q.coeffs qdeg qlc qoutCoeffs
+        r := r'
+        qoutCoeffs := q'
       return (trim { coeffs := qoutCoeffs }, trim r)
 
 
@@ -935,16 +941,19 @@ def evalAReal (p : Poly) (assign : Std.HashMap Nat AReal) : AReal :=
     return sum
 
 
+@[inline] def compareExpsAt (a b : Array Nat) (i : Nat) : Option Ordering :=
+  let ai := a[i]!
+  let bi := b[i]!
+  if ai < bi then some Ordering.lt
+  else if ai > bi then some Ordering.gt
+  else none
+
 @[inline] def compareExpsLoop (a b : Array Nat) : Ordering :=
   Id.run do
     let n := min a.size b.size
     for i in [:n] do
-      let ai := a[i]!
-      let bi := b[i]!
-      if ai < bi then
-        return Ordering.lt
-      if ai > bi then
-        return Ordering.gt
+      if let some ord := compareExpsAt a b i then
+        return ord
     return Ordering.eq
 
 def compareExps (a b : Array Nat) : Ordering :=
@@ -1151,16 +1160,20 @@ def projone (F : List Poly) (mvar : Nat) : List Poly :=
     return acc
 
 
+@[inline] def projtwoInner (f g : Poly) (mvar : Nat) : List Poly :=
+  Id.run do
+    let mut acc : List Poly := []
+    for f' in Poly.redSet f mvar do
+      acc := acc ++ subresultantCoefficients f' g mvar
+    return acc
+
 def projtwo (F : List Poly) (mvar : Nat) : List Poly :=
   Id.run do
     let mut acc : List Poly := []
     let arr := F.toArray
     for i in [:arr.size] do
       for j in [i+1:arr.size] do
-        let f := arr[i]!
-        let g := arr[j]!
-        for f' in Poly.redSet f mvar do
-          acc := acc ++ subresultantCoefficients f' g mvar
+        acc := acc ++ projtwoInner arr[i]! arr[j]! mvar
     return acc
 
 
