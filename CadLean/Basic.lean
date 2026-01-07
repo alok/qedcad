@@ -22,7 +22,15 @@ def ratPow (r : Rat) (n : Nat) : Rat :=
 theorem poly_mul_bound (i j m n : Nat) (hi : i < m) (hj : j < n) (hm : 0 < m) (_ : 0 < n) :
     i + j < m + n - 1 := by grind
 
+theorem poly_mul_bound' (i j m n : Nat) (hi : i < m) (hj : j < n) :
+    i + j < m + n := by omega
+
 theorem horner_idx_bound (i n : Nat) (hi : i < n) (_ : n > 0) : n - 1 - i < n := by grind
+
+-- Vector-based bounds proof: if result has size resSize and i + j < resSize, index is valid
+theorem vec_idx_bound (i j resSize : Nat) (hi : i < m) (hj : j < n) (hres : resSize = m + n - 1)
+    (hm : 0 < m) (hn : 0 < n) : i + j < resSize := by
+  rw [hres]; exact poly_mul_bound i j m n hi hj hm hn
 
 
 def binom : Nat → Nat → Nat
@@ -129,28 +137,49 @@ def scale (p : URatPoly) (c : Rat) : URatPoly :=
   if c = 0 then zero else { coeffs := p.coeffs.map (fun x => c * x) } |> trim
 
 
--- Simple bounds-checked version using ! for computed indices
--- The compiler can optimize these with --release
-@[inline] def mulCoeffsInner (res : Array Rat) (pi : Rat) (i : Nat) (qCoeffs : Array Rat) : Array Rat :=
+-- Vector-based multiplication inner loop - no runtime bounds checks
+-- resSize = m + n - 1 where m = pCoeffs.size, n = qCoeffs.size
+@[inline] def mulCoeffsInnerVec (res : Vector Rat resSize) (pi : Rat) (i : Nat)
+    (qCoeffs : Array Rat) (m n : Nat) (hi : i < m) (hm : 0 < m) (hn : 0 < n)
+    (hres : resSize = m + n - 1) (hqn : qCoeffs.size = n) : Vector Rat resSize :=
   Id.run do
     let mut out := res
-    for hj : j in [:qCoeffs.size] do
-      let qj := qCoeffs[j]'(Membership.mem.upper hj)
+    for hj : j in [:n] do
+      have hjn : j < n := Membership.mem.upper hj
+      have hqj : j < qCoeffs.size := by rw [hqn]; exact hjn
+      let qj := qCoeffs[j]'hqj
       if qj != 0 then
         let idx := i + j
-        let curr := out[idx]!
-        out := out.set! idx (curr + pi * qj)
+        have hidx : idx < resSize := vec_idx_bound i j resSize hi hjn hres hm hn
+        let curr := out.get ⟨idx, hidx⟩
+        out := out.set idx (curr + pi * qj) hidx
     return out
 
+-- Helper to get 0 < size from ¬isEmpty
+theorem size_pos_of_not_isEmpty (a : Array α) (h : ¬a.isEmpty) : 0 < a.size := by
+  cases hs : a.size with
+  | zero => simp [Array.isEmpty, hs] at h
+  | succ n => omega
+
 @[inline] def mulCoeffsRat (pCoeffs qCoeffs : Array Rat) : Array Rat :=
-  let n := pCoeffs.size + qCoeffs.size - 1
-  Id.run do
-    let mut res := Array.replicate n (0 : Rat)
-    for hi : i in [:pCoeffs.size] do
-      let pi := pCoeffs[i]'(Membership.mem.upper hi)
-      if pi != 0 then
-        res := mulCoeffsInner res pi i qCoeffs
-    return res
+  if hp : pCoeffs.isEmpty then #[]
+  else if hq : qCoeffs.isEmpty then #[]
+  else
+    let m := pCoeffs.size
+    let n := qCoeffs.size
+    have hm : 0 < m := size_pos_of_not_isEmpty pCoeffs hp
+    have hn : 0 < n := size_pos_of_not_isEmpty qCoeffs hq
+    let resSize := m + n - 1
+    have hres : resSize = m + n - 1 := rfl
+    Id.run do
+      let mut res : Vector Rat resSize := Vector.replicate resSize (0 : Rat)
+      for hi : i in [:m] do
+        have him : i < m := Membership.mem.upper hi
+        have hpi : i < pCoeffs.size := him
+        let pi := pCoeffs[i]'hpi
+        if pi != 0 then
+          res := mulCoeffsInnerVec res pi i qCoeffs m n him hm hn hres rfl
+      return res.toArray
 
 def mul (p q : URatPoly) : URatPoly :=
   if isZero p || isZero q then
