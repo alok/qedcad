@@ -18,32 +18,11 @@ def ratPow (r : Rat) (n : Nat) : Rat :=
   r ^ n
 
 
-@[inline] def arraySet {α : Type} (xs : Array α) (i : Nat) (v : α) : Array α :=
-  if h : i < xs.size then xs.set i v h else xs
-
-@[inline] def arraySet! {α : Type} (xs : Array α) (i : Nat) (v : α) : Array α :=
-  xs.set! i v
-
 -- Bounds lemmas for eliminating runtime checks
-theorem poly_mul_bound (i j m n : Nat) (hi : i < m) (hj : j < n) (hm : 0 < m) (hn : 0 < n) :
-    i + j < m + n - 1 := by omega
+theorem poly_mul_bound (i j m n : Nat) (hi : i < m) (hj : j < n) (hm : 0 < m) (_ : 0 < n) :
+    i + j < m + n - 1 := by grind
 
-theorem horner_idx_bound (i n : Nat) (hi : i < n) (_ : n > 0) : n - 1 - i < n := by omega
-
-def listInsert {α : Type} (cmp : α → α → Bool) (x : α) : List α → List α
-  | [] => [x]
-  | y :: ys => if cmp x y then x :: y :: ys else y :: listInsert cmp x ys
-
-
-def listSort {α : Type} (cmp : α → α → Bool) (xs : List α) : List α :=
-  xs.foldl (fun acc x => listInsert cmp x acc) []
-
-
-def listGetD {α : Type} (xs : List α) (i : Nat) (default : α) : α :=
-  match xs, i with
-  | [], _ => default
-  | x :: _, 0 => x
-  | _ :: xs, i + 1 => listGetD xs i default
+theorem horner_idx_bound (i n : Nat) (hi : i < n) (_ : n > 0) : n - 1 - i < n := by grind
 
 
 def binom : Nat → Nat → Nat
@@ -76,7 +55,7 @@ def monomial (k : Nat) (c : Rat) : URatPoly :=
   else
     Id.run do
       let mut coeffs := Array.replicate (k + 1) (0 : Rat)
-      coeffs := arraySet coeffs k c
+      coeffs := Array.setIfInBounds coeffs k c
       return { coeffs := coeffs }
 
 
@@ -103,7 +82,7 @@ def leadingCoeff (p : URatPoly) : Rat :=
 @[inline] def addCoeffsLoop (pCoeffs qCoeffs : Array Rat) (n : Nat) : Array Rat :=
   Id.run do
     let mut res := Array.replicate n (0 : Rat)
-    for h : i in [:n] do
+    for i in [:n] do
       let a := if hp : i < pCoeffs.size then pCoeffs[i]'hp else 0
       let b := if hq : i < qCoeffs.size then qCoeffs[i]'hq else 0
       if hr : i < res.size then
@@ -125,7 +104,7 @@ def add (p q : URatPoly) : URatPoly :=
       else
         coeffs ++ Array.replicate (shift + 1 - size) (0 : Rat)
     let curr := out[shift]!
-    arraySet! out shift (curr + c)
+    Array.set! out shift (curr + c)
 
 @[inline] def mulMonomialCoeffs (coeffs : Array Rat) (shift : Nat) (c : Rat) : Array Rat :=
   if c = 0 || coeffs.isEmpty then
@@ -134,7 +113,7 @@ def add (p q : URatPoly) : URatPoly :=
     Id.run do
       let mut out := Array.replicate (coeffs.size + shift) (0 : Rat)
       for i in [:coeffs.size] do
-        out := arraySet! out (i + shift) (c * coeffs[i]!)
+        out := Array.set! out (i + shift) (c * coeffs[i]!)
       return out
 
 
@@ -195,7 +174,7 @@ def derivative (p : URatPoly) : URatPoly :=
       let mut res := Array.replicate (p.coeffs.size - 1) (0 : Rat)
       for i in [1:p.coeffs.size] do
         let coeff := p.coeffs[i]!
-        res := arraySet res (i - 1) (coeff * ratOfNat i)
+        res := Array.setIfInBounds res (i - 1) (coeff * ratOfNat i)
       return trim { coeffs := res }
 
 
@@ -205,7 +184,7 @@ def eval (p : URatPoly) (x : Rat) : Rat :=
     let n := p.coeffs.size
     for h : i in [:n] do
       have hi : i < n := Membership.mem.upper h
-      have hIdx : n - 1 - i < n := by omega
+      have hIdx : n - 1 - i < n := by grind
       acc := acc * x + p.coeffs[n - 1 - i]'hIdx
     return acc
 
@@ -247,8 +226,8 @@ partial def sturmLoop (seq : List URatPoly) : List URatPoly :=
   match seq with
   | [] | [_] => seq
   | _ =>
-      let a := listGetD seq (seq.length - 2) zero
-      let b := listGetD seq (seq.length - 1) zero
+      let a := List.getD seq (seq.length - 2) zero
+      let b := List.getD seq (seq.length - 1) zero
       match sturmNext a b with
       | none => seq
       | some r => sturmLoop (seq.concat r)
@@ -375,7 +354,7 @@ def realRootsIsolate (p : URatPoly) (depth : Nat := 60) : List (Rat × Rat) :=
       let bin := ratOfNat (binom i k)
       let term := ci * bin * ratPow (-a) (i - k)
       let curr := out[k]!
-      out := arraySet! out k (curr + term)
+      out := Array.set! out k (curr + term)
     return out
 
 @[inline] def shiftCoeffs (p : URatPoly) (a : Rat) : Array Rat :=
@@ -404,7 +383,7 @@ def scaleVar (p : URatPoly) (c : Rat) : URatPoly :=
       for i in [:d+1] do
         let coeff := p.coeffs[i]!
         let factor := ratPow c (d - i)
-        coeffs := arraySet coeffs i (coeff * factor)
+        coeffs := Array.setIfInBounds coeffs i (coeff * factor)
       return trim { coeffs := coeffs }
 
 end URatPoly
@@ -447,7 +426,7 @@ def add (p q : UAlgPoly) : UAlgPoly :=
     for i in [:n] do
       let a := if i < p.coeffs.size then p.coeffs[i]! else URatPoly.zero
       let b := if i < q.coeffs.size then q.coeffs[i]! else URatPoly.zero
-      res := arraySet res i (URatPoly.add a b)
+      res := Array.setIfInBounds res i (URatPoly.add a b)
     return trim { coeffs := res }
 
 
@@ -551,7 +530,7 @@ end
   Id.run do
     let mut row := Array.replicate size URatPoly.zero
     for j in [:deg+1] do
-      row := arraySet! row (offset + j) (coeffs[deg - j]!)
+      row := Array.set! row (offset + j) (coeffs[deg - j]!)
     return row
 
 def sylvesterMatrixAlg (f g : UAlgPoly) : Array (Array URatPoly) :=
@@ -583,7 +562,7 @@ def resultantAlg (f g : UAlgPoly) : URatPoly :=
       let zpow := URatPoly.monomial (i - k) 1
       let term := URatPoly.scale zpow coeff
       let curr := out[k]!
-      out := arraySet! out k (URatPoly.add curr term)
+      out := Array.set! out k (URatPoly.add curr term)
     return out
 
 def polyZMinusX (q : URatPoly) : UAlgPoly :=
@@ -609,7 +588,7 @@ def polyZXOverX (q : URatPoly) : UAlgPoly :=
         let zpow := URatPoly.monomial i qi
         let idx := n - i
         let curr := coeffs[idx]!
-        coeffs := arraySet coeffs idx (URatPoly.add curr zpow)
+        coeffs := Array.setIfInBounds coeffs idx (URatPoly.add curr zpow)
     return UAlgPoly.trim { coeffs := coeffs }
 
 
@@ -775,7 +754,7 @@ def one (n : Nat) : Poly :=
 
 
 def var (n : Nat) (i : Nat) : Poly :=
-  let exps := arraySet (Array.replicate n 0) i 1
+  let exps := Array.setIfInBounds (Array.replicate n 0) i 1
   let m : Std.HashMap (Array Nat) Rat := {}
   { nvars := n, terms := m.insert exps 1 }
 
@@ -821,7 +800,7 @@ def addExps (a b : Array Nat) : Array Nat :=
 
 
 def setExp (exps : Array Nat) (i : Nat) (v : Nat) : Array Nat :=
-  arraySet exps i v
+  Array.setIfInBounds exps i v
 
 
 @[inline] def addTerms (p : Poly) (terms : List (Array Nat × Rat)) : Poly :=
@@ -979,7 +958,7 @@ def compareExps (a b : Array Nat) : Ordering :=
 
 def toSortedList (p : Poly) : List (Array Nat × Rat) :=
   let lst := p.terms.toList
-  listSort (fun x y => compareExps x.fst y.fst == Ordering.lt) lst
+  lst.mergeSort (fun x y => compareExps x.fst y.fst == Ordering.lt)
 
 
 def eq (p q : Poly) : Bool :=
@@ -1012,7 +991,7 @@ def toUnivariate (p : Poly) (mvar : Nat) : Array Poly :=
       let k' := setExp k mvar 0
       let curr := coeffs[e]!
       let term := addTerm (zero p.nvars) k' v
-      coeffs := arraySet coeffs e (add curr term)
+      coeffs := Array.setIfInBounds coeffs e (add curr term)
     return coeffs
 
 
@@ -1036,7 +1015,7 @@ def evalToUnivariateApprox (p : Poly) (mvar : Nat) (assign : Std.HashMap Nat ARe
     for (k, v) in p.terms.toList do
       let (e, av) := evalTermApprox k v mvar p.nvars assign
       let curr := coeffs[e]!
-      coeffs := arraySet! coeffs e (curr + av)
+      coeffs := Array.set! coeffs e (curr + av)
     return URatPoly.trim { coeffs := coeffs }
 
 
@@ -1102,7 +1081,7 @@ instance : HMul Rat Poly Poly where
     let mut row := Array.replicate size (Poly.zero nvars)
     for j in [:deg+1] do
       if i + j < size then
-        row := arraySet! row (i + j) (coeffs[deg - j]!)
+        row := Array.set! row (i + j) (coeffs[deg - j]!)
     return row
 
 @[inline] def buildSubresRows (coeffs : Array Poly) (deg size : Nat) (count : Nat) (nvars : Nat)
@@ -1242,7 +1221,7 @@ def holdsRel (rel : Rel) (x : AReal) : Bool :=
 
 
 def mergeCloseRoots (roots : List AReal) (eps : Rat) : List AReal :=
-  let sorted := listSort (fun a b => AReal.approx a < AReal.approx b) roots
+  let sorted := roots.mergeSort (fun a b => AReal.approx a < AReal.approx b)
   let rec loop (lst : List AReal) (acc : List AReal) : List AReal :=
     match lst, acc with
     | [], _ => acc
@@ -1258,7 +1237,7 @@ def mergeCloseRoots (roots : List AReal) (eps : Rat) : List AReal :=
 def getNiceRoots (p : URatPoly) : List AReal :=
   let intervals := URatPoly.realRootsIsolate p 60
   let roots := intervals.map (fun (a,b) => AReal.alg p a b)
-  listSort (fun a b => AReal.approx a < AReal.approx b) roots
+  roots.mergeSort (fun a b => AReal.approx a < AReal.approx b)
 
 
 @[inline] def getSampleBetween (a' b' : Rat) : Rat :=
