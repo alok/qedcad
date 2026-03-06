@@ -38,6 +38,20 @@ def binom : Nat → Nat → Nat
   | 0, _ + 1 => 0
   | n + 1, k + 1 => binom n k + binom n (k + 1)
 
+@[inline] def appendList (out : Array α) (xs : List α) : Array α :=
+  Id.run do
+    let mut out := out
+    for x in xs do
+      out := out.push x
+    return out
+
+@[inline] def appendArray (out : Array α) (xs : Array α) : Array α :=
+  Id.run do
+    let mut out := out
+    for x in xs do
+      out := out.push x
+    return out
+
 
 -- Univariate polynomials over Rat (coeffs low -> high)
 structure URatPoly where
@@ -798,6 +812,7 @@ def expsAllZero (exps : Array Nat) : Bool :=
     for e in exps do
       if e != 0 then
         ok := false
+        break
     return ok
 
 
@@ -928,12 +943,12 @@ def redSet (p : Poly) (i : Nat) : List Poly :=
   else
     Id.run do
       let d := degree p i
-      let mut res : List Poly := []
+      let mut res : Array Poly := Array.mkEmpty (d + 1)
       let mut curr := p
       for _ in [:d+1] do
-        res := res.concat curr
+        res := res.push curr
         curr := red curr i
-      return res
+      return res.toList
 
 
 def derivative (p : Poly) (i : Nat) : Poly :=
@@ -1162,11 +1177,11 @@ end
 
 @[inline] def subresultantPSCsLoop (fCoeffs gCoeffs : Array Poly) (df dg nvars : Nat) : List Poly :=
   Id.run do
-    let mut res : List Poly := []
+    let mut res : Array Poly := Array.mkEmpty dg
     for k in [:dg] do
       let psc := detPoly nvars (subresultantMatrix fCoeffs gCoeffs df dg k nvars)
-      res := res.concat psc
-    return res
+      res := res.push psc
+    return res.toList
 
 def subresultantCoefficients (f g : Poly) (mvar : Nat) : List Poly :=
   let df := Poly.degree f mvar
@@ -1183,42 +1198,42 @@ def subresultantCoefficients (f g : Poly) (mvar : Nat) : List Poly :=
 
 def projone (F : List Poly) (mvar : Nat) : List Poly :=
   Id.run do
-    let mut acc : List Poly := []
+    let mut acc : Array Poly := #[]
     for f in F do
       for g in Poly.redSet f mvar do
-        acc := acc.concat (Poly.leadingCoeff g mvar)
-        acc := acc ++ subresultantCoefficients g (Poly.derivative g mvar) mvar
-    return acc
+        acc := acc.push (Poly.leadingCoeff g mvar)
+        acc := appendList acc (subresultantCoefficients g (Poly.derivative g mvar) mvar)
+    return acc.toList
 
 
-@[inline] def projtwoInner (f g : Poly) (mvar : Nat) : List Poly :=
+@[inline] def projtwoInner (f g : Poly) (mvar : Nat) : Array Poly :=
   Id.run do
-    let mut acc : List Poly := []
+    let mut acc : Array Poly := #[]
     for f' in Poly.redSet f mvar do
-      acc := acc ++ subresultantCoefficients f' g mvar
+      acc := appendList acc (subresultantCoefficients f' g mvar)
     return acc
 
 def projtwo (F : List Poly) (mvar : Nat) : List Poly :=
   Id.run do
-    let mut acc : List Poly := []
+    let mut acc : Array Poly := #[]
     let arr := F.toArray
     for i in [:arr.size] do
       for j in [i+1:arr.size] do
-        acc := acc ++ projtwoInner arr[i]! arr[j]! mvar
-    return acc
+        acc := appendArray acc (projtwoInner arr[i]! arr[j]! mvar)
+    return acc.toList
 
 
 @[inline] def filterUniqPolys (proj : List Poly) : List Poly :=
   Id.run do
-    let mut uniq : List Poly := []
+    let mut uniq : Array Poly := #[]
     for p in proj do
       if Poly.isConst p || Poly.isZero p then
         continue
       let p' := Poly.normalizeSign p
       if uniq.any (fun q => Poly.eq q p') then
         continue
-      uniq := uniq.concat p'
-    return uniq
+      uniq := uniq.push p'
+    return uniq.toList
 
 @[inline] def hongproj (F : List Poly) (mvar : Nat) : List Poly :=
   filterUniqPolys (projone F mvar ++ projtwo F mvar)
@@ -1265,8 +1280,7 @@ def mergeCloseRoots (roots : List AReal) (eps : Rat) : List AReal :=
 
 def getNiceRoots (p : URatPoly) : List AReal :=
   let intervals := URatPoly.realRootsIsolate p 60
-  let roots := intervals.map (fun (a,b) => AReal.alg p a b)
-  roots.mergeSort (fun a b => AReal.approx a < AReal.approx b)
+  intervals.map (fun (a, b) => AReal.alg p a b)
 
 
 @[inline] def getSampleBetween (a' b' : Rat) : Rat :=
@@ -1300,7 +1314,8 @@ def makeSamples (roots : List AReal) : List AReal :=
         match rest with
         | [] => acc ++ [AReal.rat (getSamplePoint (some (AReal.approx prev)) none)]
         | r :: rs =>
-            let acc' := acc ++ [AReal.rat (getSamplePoint (some (AReal.approx prev)) (some (AReal.approx r))), r]
+            let acc' :=
+              acc ++ [AReal.rat (getSamplePoint (some (AReal.approx prev)) (some (AReal.approx r))), r]
             loop r rs acc'
       let acc0 := [AReal.rat (getSamplePoint none (some (AReal.approx r0))), r0]
       loop r0 rs acc0
@@ -1370,19 +1385,20 @@ def assignmentToNameMap (assign : Std.HashMap Nat AReal) (vars : Array String) :
       let v := Poly.evalAReal c.poly pt
       if !holdsRel c.rel v then
         ok := false
+        break
     return ok
 
 @[inline] def collectSolutions (constraints : List Constraint) (vars : Array String)
     (samples : List (Std.HashMap Nat AReal)) (returnOneSample : Bool) :
     List (Std.HashMap String AReal) :=
   Id.run do
-    let mut results : List (Std.HashMap String AReal) := []
+    let mut results : Array (Std.HashMap String AReal) := #[]
     for pt in samples do
       if constraintsHold constraints pt then
-        results := results.concat (assignmentToNameMap pt vars)
+        results := results.push (assignmentToNameMap pt vars)
         if returnOneSample then
           break
-    return results
+    return results.toList
 
 def solvePolySystemCAD (constraints : List Constraint) (vars : Array String) (returnOneSample : Bool := true)
     : List (Std.HashMap String AReal) :=
