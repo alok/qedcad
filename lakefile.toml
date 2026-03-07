@@ -5,7 +5,8 @@ benchDriver = "LeanBench/leanbench"
 
 [[require]]
 name = "LeanBench"
-path = "../leanbench"
+git = "https://github.com/alok/LeanBench.git"
+rev = "250d2a892bf8c91ec3ae5de8517793e18379f97b"
 
 [[lean_lib]]
 name = "CadLean"
