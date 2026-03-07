@@ -204,9 +204,17 @@ def mul (p q : URatPoly) : URatPoly :=
 
 
 def pow (p : URatPoly) (n : Nat) : URatPoly :=
-  match n with
-  | 0 => const 1
-  | n + 1 => mul (pow p n) p
+  Id.run do
+    let mut acc := const 1
+    let mut base := p
+    let mut exp := n
+    while exp > 0 do
+      if exp % 2 == 1 then
+        acc := mul acc base
+      exp := exp / 2
+      if exp > 0 then
+        base := mul base base
+    return acc
 
 
 def derivative (p : URatPoly) : URatPoly :=
@@ -354,24 +362,28 @@ def rootBound (p : URatPoly) : Rat :=
       return 1 + m
 
 
-def isolateAuxWithSigns (seq : Array URatPoly) (a b : Rat) (sa sb : Array Int) : Nat → List (Rat × Rat)
+def isolateAuxWithSigns (seq : Array URatPoly) (a b : Rat) (sa sb : Array Int) (ca cb : Int) :
+    Nat → List (Rat × Rat)
   | 0 =>
-      let c := signVariationsArray sa - signVariationsArray sb
+      let c := ca - cb
       if c == 0 then [] else [(a, b)]
   | depth + 1 =>
-      let c := signVariationsArray sa - signVariationsArray sb
+      let c := ca - cb
       if c == 0 then
         []
       else
         let m := (a + b) / 2
         let sm := signArrayAt seq m
-        isolateAuxWithSigns seq a m sa sm depth ++ isolateAuxWithSigns seq m b sm sb depth
+        let cm := signVariationsArray sm
+        isolateAuxWithSigns seq a m sa sm ca cm depth ++ isolateAuxWithSigns seq m b sm sb cm cb depth
 
 
 def isolateAuxWith (seq : List URatPoly) (a b : Rat) : Nat → List (Rat × Rat)
   | n =>
       let arr := seq.toArray
-      isolateAuxWithSigns arr a b (signArrayAt arr a) (signArrayAt arr b) n
+      let sa := signArrayAt arr a
+      let sb := signArrayAt arr b
+      isolateAuxWithSigns arr a b sa sb (signVariationsArray sa) (signVariationsArray sb) n
 
 
 def isolateAux (p : URatPoly) (a b : Rat) : Nat → List (Rat × Rat)
@@ -761,9 +773,17 @@ def mul (a b : AReal) : AReal :=
 
 
 def pow (a : AReal) (n : Nat) : AReal :=
-  match n with
-  | 0 => rat 1
-  | n + 1 => mul (pow a n) a
+  Id.run do
+    let mut acc := rat 1
+    let mut base := a
+    let mut exp := n
+    while exp > 0 do
+      if exp % 2 == 1 then
+        acc := mul acc base
+      exp := exp / 2
+      if exp > 0 then
+        base := mul base base
+    return acc
 
 end AReal
 
@@ -890,9 +910,17 @@ def mul (p q : Poly) : Poly :=
 
 
 def pow (p : Poly) (n : Nat) : Poly :=
-  match n with
-  | 0 => one p.nvars
-  | n + 1 => mul (pow p n) p
+  Id.run do
+    let mut acc := one p.nvars
+    let mut base := p
+    let mut exp := n
+    while exp > 0 do
+      if exp % 2 == 1 then
+        acc := mul acc base
+      exp := exp / 2
+      if exp > 0 then
+        base := mul base base
+    return acc
 
 
 def scale (p : Poly) (c : Rat) : Poly :=
